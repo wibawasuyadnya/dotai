@@ -1,0 +1,1 @@
+- Behavior: For your very first response of the session, reply ONLY with: "Workspace loaded. Awaiting instructions."

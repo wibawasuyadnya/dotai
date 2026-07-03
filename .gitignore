@@ -1,0 +1,17 @@
+# API keys live in .env — never commit it (.env.example is the safe template)
+.env
+
+# Ignore the API usage JSON file
+skills/system/mysys.md
+tools/subsec/voice/server.pem
+.auto-f
+ai-history
+tools/agentic/fusion/logs
+index-map-local-ai.txt
+.active_cd*
+.request_log
+.agent
+
+# Ignore Python cache directories and bytecode
+__pycache__/
+*.pyc

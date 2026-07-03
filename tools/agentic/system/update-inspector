@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# AI Update Inspector v0.8.7 [suyadnya] [07-01-26]
+
+set -euo pipefail
+
+spinner_chars=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
+SPINNER_PID=""
+
+start_spinner() {
+    echo -ne "\033[?25l" >&2  # Hide cursor
+    (
+        local i=0
+        while true; do
+            printf "\r\033[1;32m%s\033[0m Checking for updates..." "${spinner_chars[i % 10]}" >&2
+            ((i++)); sleep 0.08
+        done
+    ) &
+    SPINNER_PID=$!
+}
+
+stop_spinner() {
+    if [ -n "${SPINNER_PID:-}" ]; then
+        kill "$SPINNER_PID" 2>/dev/null || true
+        wait "$SPINNER_PID" 2>/dev/null || true
+        SPINNER_PID=""
+    fi
+    echo -ne "\r\033[2K\r\033[?25h" >&2  # Restore cursor
+}
+
+# DRY Helper: Process raw package outputs into count and wrapped comma-separated list
+parse_packages() {
+    local raw="$1"
+    [[ -z "$raw" ]] && echo "0|*None*" && return
+    local count; count=$(echo "$raw" | wc -l)
+    # Warning-free single-pass awk: uses octal \140 to print backticks cleanly
+    local pkgs; pkgs=$(echo "$raw" | awk '{printf "%s\140%s\140", (NR==1?"":", "), $1} END {print ""}')
+    echo "$count|$pkgs"
+}
+
+trap stop_spinner EXIT
+
+# 1. Start loading spinner
+start_spinner
+
+# 2. Gather Native Repository Updates
+cachyos_count="0"
+cachyos_packages="*None*"
+arch_count="0"
+arch_packages="*None*"
+repo_error=""
+
+if command -v checkupdates >/dev/null 2>&1; then
+    raw_repo=$(checkupdates 2>/dev/null || true)
+    
+    if [ -n "$raw_repo" ]; then
+        # Extract package names and query sync database to split CachyOS from Arch Extra/Core
+        pkg_names=$(echo "$raw_repo" | awk '{print $1}')
+        
+        # Symmetrical seen-filter: only registers the first (prioritized) repository for each package
+        repo_info=$(pacman -Si $pkg_names 2>/dev/null | awk '/^Repository/ {repo=$3} /^Name/ {name=$3; if (!seen[name]) { print repo"|"name; seen[name]=1 } }')
+        
+        cachyos_raw=$(echo "$repo_info" | grep "cachyos" | cut -d'|' -f2 || true)
+        arch_raw=$(echo "$repo_info" | grep -v "cachyos" | cut -d'|' -f2 || true)
+        
+        IFS='|' read -r cachyos_count cachyos_packages <<< "$(parse_packages "$cachyos_raw")"
+        IFS='|' read -r arch_count arch_packages <<< "$(parse_packages "$arch_raw")"
+    fi
+else
+    repo_error="*Error: checkupdates utility missing*"
+fi
+
+# 3. Gather AUR Updates (Unified 1-line helper check)
+aur_helper=$(command -v paru >/dev/null && echo "paru" || { command -v yay >/dev/null && echo "yay"; } || echo "")
+aur_count="0"
+aur_packages="*None*"
+aur_error=""
+
+if [ -n "$aur_helper" ]; then
+    raw_aur=$($aur_helper -Qua 2>/dev/null || true)
+    IFS='|' read -r aur_count aur_packages <<< "$(parse_packages "$raw_aur")"
+else
+    aur_error="*None (No AUR helper detected)*"
+fi
+
+# 4. Stop loading spinner
+stop_spinner
+
+# 5. Output AI Instructions and Raw Metrics to stdout
+SKILL_FILE="$HOME/.config/local-ai/skills/system/update-inspector.md"
+if [ -f "$SKILL_FILE" ]; then
+    cat "$SKILL_FILE"
+    echo ""
+fi
+
+# Dynamically hide CachyOS section if there are no CachyOS packages active
+if [ "$cachyos_count" -gt 0 ]; then
+    echo "## CACHYOS REPOSITORY UPDATES"
+    echo "* **Pending CachyOS**: \`$cachyos_count\`"
+    echo "* **Packages**: $cachyos_packages"
+    echo ""
+fi
+
+echo "## STANDARD ARCH REPOSITORY UPDATES"
+if [ -n "$repo_error" ]; then
+    echo "* **Pending Arch**: $repo_error"
+else
+    echo "* **Pending Arch**: \`$arch_count\`"
+    echo "* **Packages**: $arch_packages"
+fi
+
+echo ""
+echo "## AUR REPOSITORY UPDATES"
+if [ -n "$aur_error" ]; then
+    echo "* **Pending AUR**: $aur_error"
+else
+    echo "* **Pending AUR**: \`$aur_count\`"
+    echo "* **Packages**: $aur_packages"
+fi
