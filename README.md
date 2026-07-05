@@ -1,9 +1,9 @@
-<h1 align="center">Local-AI Agent</h1>
+<h1 align="center">DotAI</h1>
 
 <p align="center">
-  A zero-daemon, multi-backend AI agent for your terminal.<br>
-  Chat with <b>Claude</b> (your claude.ai login), <b>Codex</b> (your ChatGPT login), <b>DeepSeek</b>,
-  <b>OpenRouter</b>, <b>Gemini</b>, or any <b>local GGUF model</b> (Hermes, Qwen, Llama, …) —
+  A zero-daemon, multi-backend, multi-agent AI for your terminal.<br>
+  Chat with <b>Claude</b> (your claude.ai login), <b>Codex</b> (your ChatGPT login),
+  <b>OpenRouter</b> (DeepSeek & hundreds more), <b>Gemini</b>, or any <b>local GGUF model</b> (Hermes, Qwen, Llama, …) —
   with automatic fallback between them.
 </p>
 
@@ -15,7 +15,7 @@
 
 ## Features
 
-- **6 interchangeable backends** — switch with a single env var, no restart, no config file
+- **5 interchangeable backends** — switch with a single env var, no restart, no config file
 - **Automatic fallback cascade** — if your primary backend is down or rate-limited, the next one answers
 - **Claude & Codex via your subscriptions** — uses the official `claude` / `codex` CLI logins, so no API keys are needed
 - **Unlimited local agents** — every folder can become a persistent, codebase-aware agent with its own memory, history, and personality (skill)
@@ -34,7 +34,7 @@
 | **[llama.cpp](https://github.com/ggml-org/llama.cpp)** | *Optional* — only for running local models (`brew install llama.cpp` / your package manager) |
 | **[Claude Code CLI](https://claude.com/claude-code)** | *Optional* — only for the Claude backend (`brew install claude` or `npm i -g @anthropic-ai/claude-code`, then `claude login`) |
 | **[OpenAI Codex CLI](https://github.com/openai/codex)** | *Optional* — only for the Codex backend (`brew install codex` or `npm i -g @openai/codex`, then `codex login`) |
-| **At least one backend** | Any of: Claude login, ChatGPT/Codex login, DeepSeek key, OpenRouter key, Gemini key, or a local model |
+| **At least one backend** | Any of: Claude login, ChatGPT/Codex login, OpenRouter key, Gemini key, or a local model |
 
 ---
 
@@ -79,7 +79,7 @@ nano ~/.config/local-ai/.env      # or open it in any editor
 ```
 
 ```dotenv
-# Primary backend: claude | codex | deepseek | openrouter | gemini | local
+# Primary backend: claude | codex | openrouter | gemini | local
 AI_BACKEND=claude
 
 # Claude — NO API key needed, uses your claude.ai login via the claude CLI
@@ -89,11 +89,7 @@ CLAUDE_MODEL=sonnet                              # sonnet | haiku | opus
 # CODEX_MODEL=gpt-5.2-codex                      # omit to use your codex default
 # CODEX_EFFORT=medium                            # minimal | low | medium | high
 
-# DeepSeek (direct API) — key from platform.deepseek.com/api_keys
-DEEPSEEK_API_KEY=sk-your-key-here
-DEEPSEEK_MODEL=deepseek-v4-flash
-
-# OpenRouter — one key, hundreds of models — openrouter.ai/keys
+# OpenRouter — one key, hundreds of models (incl. DeepSeek) — openrouter.ai/keys
 OPENROUTER_API_KEY=sk-or-v1-your-key-here
 OPENROUTER_MODEL=deepseek/deepseek-v4-flash
 
@@ -113,8 +109,7 @@ These aliases are available out of the box for hopping between backends:
 | :--- | :--- |
 | `aic` | Claude (claude.ai account login) |
 | `aix` | Codex (ChatGPT account login) |
-| `aid` | DeepSeek direct API |
-| `aio` | OpenRouter |
+| `aio` | OpenRouter (DeepSeek & hundreds more) |
 | `aig` | Gemini |
 | `ail` | Local model (llama.cpp) |
 
@@ -143,12 +138,12 @@ configured backends automatically.
 
 `AI_BACKEND` promotes one engine to the front of the line; everything else you
 have configured stays behind it as a fallback. So with `AI_BACKEND=claude` and
-a DeepSeek key set, a Claude outage (or hitting your subscription's token
-limit) automatically falls through to DeepSeek — or force it yourself for one
+an OpenRouter key set, a Claude outage (or hitting your subscription's token
+limit) automatically falls through to OpenRouter — or force it yourself for one
 question:
 
 ```bash
-aid "explain this error"        # DeepSeek, right now, regardless of default
+aio "explain this error"        # OpenRouter, right now, regardless of default
 ail                             # full chat session on your local model
 ```
 
@@ -173,7 +168,7 @@ Swap the `-hf` repo for **any GGUF on Hugging Face** to change models
 (Qwen, Llama, Mistral, …). Rough sizing guide: a Q4_K_M GGUF needs ~0.6 GB RAM
 per billion parameters — a 14B model fits in 16–24 GB machines, a 70B does not.
 > **Note:** giant MoE models like DeepSeek V4 (284B) can't run on normal
-> hardware — use them through the DeepSeek API or OpenRouter instead.
+> hardware — use them through OpenRouter instead.
 
 Keep the server running in a separate terminal (or a `tmux` pane / LaunchAgent),
 then use `AI_BACKEND=local` — or no keys at all, since `local` is the final fallback.
@@ -218,6 +213,106 @@ with `/skill <name>`.
 
 ---
 
+## Team orchestration in the terminal
+
+You are the orchestrator: from inside `ai` (or as a one-shot) address any role
+agent from `agents.json` directly — each has its own model, system prompt, and
+persistent session, shared with the web GUI:
+
+```bash
+❯ @debug this stack trace says NoneType has no attribute 'id' — why?
+❯ @review here's my diff, find the bugs
+❯ @research compare SSE vs WebSockets for streaming chat
+❯ @debug /new                # start a fresh Debugger session
+❯ /team                      # roster, models, session counts
+
+ai @research "is bun production ready?"    # one-shot from the shell
+```
+
+Each reply ends with a dim usage line (`↓tokens ↑tokens · $cost · model`).
+
+### Customizing the team
+
+Full CRUD from the terminal — no file editing needed:
+
+```bash
+❯ /team add coder            # wizard: name, icon, backend, model, prompt
+❯ /team show coder           # full config of one agent
+❯ /team edit coder model deepseek/deepseek-v4-pro
+❯ /team edit coder prompt You write clean, working code.
+❯ /team edit coder backend claude    # or: name, icon
+❯ /team rm coder             # confirms, offers to drop its sessions too
+```
+
+These all work as one-shots from the shell too (`ai /team add`). Under the
+hood the team is just `agents.json` — you can still edit it by hand and the
+change applies to the very next message (`/team` re-reads it live). Each entry:
+
+```jsonc
+{
+  "id": "debug",                        // the @handle in the terminal
+  "name": "Debugger",                   // display name (GUI sidebar, prefix)
+  "icon": "🐞",
+  "backend": "openrouter",              // openrouter (default) | claude | codex
+  "model": "deepseek/deepseek-v4-pro",  // openrouter slug; claude: sonnet|opus|haiku; codex: gpt-5.2-codex or ""
+  "system": "You are a senior debugging specialist…"
+}
+```
+
+- **Model changes** — running sessions keep the model they were created
+  with; start a fresh one with `@debug /new` to pick up the change.
+- **Skills on agents** — `/team edit chat skills caveman` appends the skill
+  file's text to that agent's system prompt (comma/space-separate for
+  several, `none` to clear). The bundled `caveman` skill (from
+  [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman)) makes an
+  agent answer in terse caveman-speak — ~65% fewer output tokens, code and
+  errors stay exact. Install more with `/skill add <name> <owner/repo|url>`.
+- **MCP tools on agents** — declare servers with
+  `/mcp add <name> <url | command…>` (stored in `mcp.json`), then attach
+  with `/team edit <id> mcp <name>`. The agent can call the server's tools
+  mid-answer (shown as dim `∗ server.tool {…}` lines); OpenRouter backend
+  only, replies arrive whole because tool rounds can't stream. Try the demo:
+  `/mcp tools everything`, then ask an attached agent to "use get-sum".
+- **`claude` / `codex` backends** ride your Claude Pro / ChatGPT subscriptions
+  through the CLI logins: no per-token cost, token counts are estimates, and
+  codex replies arrive in one chunk (its exec mode can't stream). They need
+  the CLI installed on whatever machine runs the engine — so on the VPS
+  Docker stack, keep team agents on `openrouter`.
+
+## Multi-agent app (web GUI + Electron)
+
+On top of the terminal agent there's a Conduit-style multi-agent workspace:
+role agents defined in `agents.json` (Debugger and Reviewer on
+`deepseek/deepseek-v4-pro`, Researcher and General on
+`deepseek/deepseek-v4-flash`, all via OpenRouter), with sessions persisted as
+JSON under `.sessions/`. Both frontends share one engine
+(`modules/agent_service.py`):
+
+| Piece | Where | Run with |
+| :--- | :--- | :--- |
+| API server (REST + SSE, stdlib-only, port 8765) | `server/server.py` | `ais` |
+| Web GUI (Next.js + TypeScript, port 3000) | `gui/` | `cd gui && npm run dev` |
+| Desktop app (Electron, spawns the server itself) | `gui/electron/` | `cd gui && npm run app` |
+
+One-time setup:
+
+```bash
+# npm 11 blocks postinstall scripts, so approve Electron's
+cd gui && npm install && npm approve-scripts electron && npm rebuild electron
+```
+
+The web GUI and Electron app talk to the server on `127.0.0.1:8765` —
+Electron starts it automatically if it isn't running. Edit `agents.json` to
+add roles, change models, or rewrite system prompts; changes apply on the
+next session.
+
+**Hosting it on a VPS:** the whole stack ships as Docker containers behind a
+password-protected Caddy proxy, so all your devices share the same sessions —
+see [deploy/README.md](deploy/README.md). The Mac Electron app can point at
+the VPS with `AI_GUI_URL=http://<vps> AI_GUI_USER=admin AI_GUI_PASS=… npm run electron`.
+
+---
+
 ## Command reference
 
 ### Shell commands
@@ -227,24 +322,34 @@ with `/skill <name>`.
 | `ai` | Interactive multi-turn chat |
 | `ai <query>` | One-shot answer, straight back to your prompt |
 | `ai init <path> [-skill]` | Launch (or create) a codebase-aware workspace agent |
+| `ais` | Multi-agent API server on :8765 (for the web GUI) |
 | `hs` / `hist` | Search / view the active workspace history |
 
 ### In-session commands
 
 | Command | Description |
 | :--- | :--- |
-| `/agent <name>` | Switch backend mid-chat: `claude`, `codex`, `deepseek`, `openrouter`, `gemini`, `local` (your llama.cpp model), or `auto` |
-| `/model <name>` | Change the current backend's model (e.g. `/model haiku`, `/model deepseek-v4-pro`) |
+| `@<role> <msg>` | Message a team agent (`@debug`, `@review`, `@research`, `@chat`); `@<role> /new` starts a fresh session |
+| `/team` | List the team agents, their models, and session counts |
+| `/team add [id]` | Create a team agent (wizard asks name, icon, backend, model, prompt) |
+| `/team edit <id> <field> <value>` | Change `name`, `icon`, `model`, `backend`, or `prompt` |
+| `/team rm <id>` | Delete a team agent (asks about its sessions too) |
+| `/team show <id>` | Show one agent's full config |
+| `/agent <name>` | Switch backend mid-chat: `claude`, `codex`, `openrouter`, `gemini`, `local` (your llama.cpp model), or `auto` |
+| `/model <name>` | Change the current backend's model (e.g. `/model haiku`, `/model deepseek/deepseek-v4-pro`) |
 | `/effort <level>` | Codex reasoning effort: `minimal` `low` `medium` `high` |
 | `/skill <name>` (or `/s`) | Load a skill on the fly |
+| `/skill list` / `add <name> <owner/repo\|url>` / `rm <name>` | Manage skills (installs to `skills/custom/`) |
+| `/mcp` / `add <name> <url\|command…>` / `tools <name>` / `rm <name>` | Manage MCP servers (`mcp.json`); attach with `/team edit <id> mcp <name>` |
 | `view file <path>` | Read a local file into context |
-| `-save <tag>` / `-load` | Snapshot / roll back the conversation (SQLite) |
+| `/save <tag>` / `/load` | Snapshot / roll back the conversation (SQLite) |
 | `/f` `/t` `/b` `/a` | Follow-up / Thinking / Brainstorm / All prompt subroutines |
 | `/clear` `/reset` | Wipe session, history, and memory for this workspace |
 | `/m` | Toggle long-term memory |
 | `/stats` / `/tok` | Toggle speed metrics / show token usage |
 | `/d` / `/e` | Disable / enable the spellchecker |
-| `exit` / `q` | Leave the session |
+| `/help` | Show all commands in the terminal |
+| `/exit` / `/q` | Leave the session |
 
 ---
 
@@ -254,10 +359,10 @@ with `/skill <name>`.
 | :--- | :--- |
 | `ai: command not found` | Open a new terminal, or `source ~/.zshrc` |
 | Claude backend silent / erroring | Run `claude login` once; check `claude -p "hi"` works by itself |
-| **Claude waiting for token reset** | `aid "…"` (DeepSeek) or `ail` (local) — the cascade also does this automatically |
+| **Claude waiting for token reset** | `aio "…"` (OpenRouter) or `ail` (local) — the cascade also does this automatically |
 | `localhost:8080 failed` | Your llama-server isn't running — `./start-hermes.sh` |
 | Wrong/stale model shown in the startup box | The box reflects `AI_BACKEND` + keys at launch; check your exports |
-| DeepSeek 402 / insufficient balance | Top up at platform.deepseek.com, or use the free OpenRouter variant |
+| OpenRouter 402 / insufficient credits | Top up at openrouter.ai/credits, or use a `:free` model variant |
 
 ---
 

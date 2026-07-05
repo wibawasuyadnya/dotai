@@ -1,0 +1,19 @@
+# Single origin: GUI at /, API at /api/* — everything behind basic auth.
+# SITE_ADDRESS=":80" for plain HTTP (Tailscale/LAN), or "your.domain.com"
+# for automatic Let's Encrypt HTTPS on a public VPS.
+{$SITE_ADDRESS}
+
+basic_auth {
+    {$GUI_USER} {$GUI_PASS_HASH}
+}
+
+handle /api/* {
+    reverse_proxy api:8765 {
+        # SSE streaming: don't buffer
+        flush_interval -1
+    }
+}
+
+handle {
+    reverse_proxy gui:3000
+}

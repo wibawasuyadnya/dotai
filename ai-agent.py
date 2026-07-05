@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Local-Ai Agent [suyadnya] [v0.8.9.12]
+# DotAI Agent [suyadnya] [v0.9.0]
 # Path: ~/.config/local-ai/ai-agent.py
 
 import os
@@ -91,7 +91,7 @@ def sync_md_to_sqlite(workspace: str, workspace_path: str) -> None:
 def background_tpm_update(user_msg: str, assistant_msg: str, workspace: str, workspace_path: str):
     """Asynchronously extracts, reconciles, and commits user facts to SQLite and tpm.md."""
     cleaned = user_msg.lower().strip()
-    if len(cleaned) < 8 or cleaned in ("hello", "hi", "hey", "exit", "quit", "q", "/clear", "/reset", "/stats", "/tok", "/m"):
+    if len(cleaned) < 8 or cleaned in ("hello", "hi", "hey", "exit", "quit", "q", "/exit", "/quit", "/q", "/clear", "/reset", "/stats", "/tok", "/m", "/help"):
         return
     try:
         import sqlite3
@@ -170,7 +170,38 @@ def background_tpm_update(user_msg: str, assistant_msg: str, workspace: str, wor
 
 # Helper to stream and count tokens for the speed-test
 def stream_llm_response(messages: list, prefix: str = "AI: ", show_stats: bool = True) -> str or None:
+    try:
+        import speed_test
+        speed_test.set_label(ui.current_model_name())
+    except Exception:
+        pass
     return core.stream_response(messages, prefix, CFG_DIR, show_stats)
+
+
+HELP_TEXT = """\033[1mcommands\033[0m
+  \033[1;36m/help\033[0m /h /?          \033[2mthis list\033[0m
+  \033[1;36m/exit\033[0m /quit /q       \033[2mleave\033[0m
+  \033[1;36m/clear\033[0m /reset        \033[2mwipe history, cloud session, and TPM memory\033[0m
+  \033[1;36m/save\033[0m <name>         \033[2msave this conversation\033[0m
+  \033[1;36m/load\033[0m /timeline      \033[2mbrowse and restore a saved session\033[0m
+  \033[1;36m/agent\033[0m <name>        \033[2mbackend: claude | codex | openrouter | local | auto\033[0m
+  \033[1;36m/model\033[0m <name>        \033[2mset the current backend's model\033[0m
+  \033[1;36m/effort\033[0m <lvl>        \033[2mcodex reasoning: minimal | low | medium | high\033[0m
+  \033[1;36m/skill\033[0m <name>        \033[2mload a skill/role (alias /s)\033[0m
+  \033[1;36m/skill list\033[0m          \033[2mall skills · /skill add <name> <owner/repo|url> · /skill rm <name>\033[0m
+  \033[1;36m/mcp\033[0m                 \033[2mMCP servers · /mcp add <name> <url|command…> · /mcp tools <name> · /mcp rm\033[0m
+  \033[1;36m/tok\033[0m                 \033[2mtoken count of the conversation\033[0m
+  \033[1;36m/stats\033[0m               \033[2mtoggle generation statistics\033[0m
+  \033[1;36m/m\033[0m                   \033[2mtoggle long-term memory + TPM\033[0m
+  \033[1;36m/e\033[0m /d                \033[2mspellchecker on / off\033[0m
+\033[1mteam\033[0m \033[2m(agents.json)\033[0m
+  \033[1;36m@<role>\033[0m <msg>        \033[2mmessage a team agent · @<role> /new = fresh session\033[0m
+  \033[1;36m/team\033[0m               \033[2mroster, models, session counts\033[0m
+  \033[1;36m/team add\033[0m [id]      \033[2mcreate an agent (wizard)\033[0m
+  \033[1;36m/team edit\033[0m <id> <name|icon|model|backend|prompt|skills|mcp> <value>
+  \033[1;36m/team rm\033[0m <id>       \033[2mdelete an agent (asks about sessions)\033[0m
+  \033[1;36m/team show\033[0m <id>     \033[2mone agent's full config\033[0m
+"""
 
 
 def run_interactive_chat(args: list):
@@ -223,23 +254,35 @@ def run_interactive_chat(args: list):
     
     try:
         while True:
+            typed = False
             if pending_query:
                 query, pending_query = pending_query, None
             else:
+                typed = True
                 try:
+                    # Opencode-style: composer pinned to the bottom row
+                    ui.composer_prepare("/help commands · /team agents · /exit quit")
                     query = input("\x01\033[1;30m\x02❯\x01\033[0m\x02 ").strip()
                 except EOFError:
                     break
                 finally:
+                    ui.composer_done()
                     try:
                         readline.set_startup_hook(None)
                     except Exception:
                         pass
                 if not query:
                     continue
-                if query.lower() in ("exit", "quit", "q"):
+                # Commands echo dim into the content area (the composer row
+                # is cleared, so the typed line would otherwise vanish)
+                if query.startswith(("/", "-")):
+                    print(f"\033[1;30m❯\033[0m \033[2m{query}\033[0m")
+                if query.lower() in ("/exit", "/quit", "/q", "exit", "quit", "q"):
                     print("\r\033[1;33mExiting conversation.\033[0m")
                     sys.exit(0)
+                if query.lower() in ("/help", "/h", "/?"):
+                    print(HELP_TEXT)
+                    continue
                 if query in ("/d", "/e"):
                     spell_active = (query == "/e")
                     print(f"\033[1;33m[sys] Spellchecker {'enabled' if spell_active else 'disabled'}.\033[0m\n")
@@ -260,7 +303,7 @@ def run_interactive_chat(args: list):
                 # --- LIVE BACKEND / MODEL / EFFORT SWITCHING ---
                 if query.split()[0] in ("/agent", "/agents", "/backend"):
                     arg = query.split(None, 1)[1].strip().lower() if " " in query else ""
-                    valid = ("claude", "codex", "deepseek", "openrouter", "gemini", "local", "auto")
+                    valid = ("claude", "codex", "openrouter", "gemini", "local", "auto")
                     if arg in valid:
                         if arg == "auto":
                             os.environ.pop("AI_BACKEND", None)
@@ -274,7 +317,7 @@ def run_interactive_chat(args: list):
                     continue
 
                 if query.split()[0] == "/model":
-                    model_vars = {"claude": "CLAUDE_MODEL", "codex": "CODEX_MODEL", "deepseek": "DEEPSEEK_MODEL", "openrouter": "OPENROUTER_MODEL", "gemini": "CLOUD_MODEL"}
+                    model_vars = {"claude": "CLAUDE_MODEL", "codex": "CODEX_MODEL", "openrouter": "OPENROUTER_MODEL", "gemini": "CLOUD_MODEL"}
                     backend_now = os.environ.get("AI_BACKEND", "").strip().lower()
                     var = model_vars.get(backend_now)
                     arg = query.split(None, 1)[1].strip() if " " in query else ""
@@ -326,13 +369,17 @@ def run_interactive_chat(args: list):
                     except Exception:
                         pass
                         
+                    # Fresh screen like opencode: wipe content and redraw header
+                    if sys.stdout.isatty():
+                        sys.stdout.write("\033[2J\033[H")
+                        ui.draw_session_box(workspace_path, home_dir, is_agent, db_turns, tpm_count, memory_active, active_system_prompt, clean_name)
                     print("\033[1;32m[sys] Conversation history, cloud session, and local TPM memory cleared.\033[0m\n")
                     continue
 
                 if query == "/tok":
                     subprocess.run([sys.executable, f"{CFG_DIR}/modules/ai-agent-sessions", "show-tok"], input=json.dumps(chat_history), text=True)
                     continue
-                if spell_active and not query.startswith(("/", "-", "#", "```")):
+                if spell_active and not query.startswith(("/", "-", "#", "@", "```")):
                     action, query = spell.check_query_spelling(query, ui.get_key)
                     if action == "EDIT":
                         try:
@@ -343,7 +390,82 @@ def run_interactive_chat(args: list):
                     elif action == "DISABLE":
                         spell_active = False
                     
-            if query.startswith(("/skill", "/s")) or query.startswith(("/skill ", "/s ")):
+            # Opencode-style: re-render the typed line as a shaded user block
+            # (chat + @team messages only; /commands keep the plain prompt)
+            if typed and not query.startswith(("/", "-")):
+                ui.echo_user_block(query)
+
+            # --- TEAM ORCHESTRATION: @debug/@review/@research from agents.json ---
+            if query.startswith("@") or query.split()[0] == "/team":
+                import agent_roles as roles
+                if query.split()[0] == "/team":
+                    roles.team_command(query)
+                else:
+                    roles.dispatch(query)
+                continue
+
+            # --- MCP SERVERS: /mcp [add|rm|tools] (config in mcp.json) ---
+            if query.split()[0] == "/mcp":
+                import mcp_client as mcp
+                p = query.split()
+                servers = mcp.load_servers()
+                if len(p) == 1:
+                    if not servers:
+                        print("\033[2m[mcp] none configured — /mcp add <name> <url | command…>\033[0m\n")
+                    else:
+                        for name, cfg in servers.items():
+                            target = cfg.get("url") or " ".join(cfg.get("command", []))
+                            try:
+                                status = f"{len(mcp.list_tools(name))} tools"
+                            except Exception as e:
+                                status = f"unreachable: {str(e)[:48]}"
+                            print(f"  \033[1m{name:<12}\033[0m \033[2m{target[:70]} · {status}\033[0m")
+                        print("\033[2m  attach to an agent with /team edit <id> mcp <name>\033[0m\n")
+                elif p[1] == "add" and len(p) >= 4:
+                    servers[p[2]] = {"url": p[3]} if p[3].startswith("http") else {"command": p[3:]}
+                    mcp.save_servers(servers)
+                    print(f"\033[1;32m[mcp] added '{p[2]}' — check it with /mcp tools {p[2]}\033[0m\n")
+                elif p[1] in ("rm", "remove") and len(p) >= 3:
+                    if servers.pop(p[2], None) is not None:
+                        mcp.save_servers(servers)
+                        print(f"\033[1;32m[mcp] '{p[2]}' removed\033[0m\n")
+                    else:
+                        print(f"\033[1;33m[mcp] no server '{p[2]}'\033[0m\n")
+                elif p[1] == "tools" and len(p) >= 3:
+                    try:
+                        for t in mcp.list_tools(p[2]):
+                            desc = (t.get("description") or "").split("\n")[0][:80]
+                            print(f"  \033[1m{t['name']:<28}\033[0m \033[2m{desc}\033[0m")
+                        print()
+                    except Exception as e:
+                        print(f"\033[1;31m[mcp] {e}\033[0m\n")
+                else:
+                    print("\033[1;33m[mcp] usage: /mcp · /mcp add <name> <url | command…> · /mcp tools <name> · /mcp rm <name>\033[0m\n")
+                continue
+
+            # --- SKILL MANAGEMENT: /skill list|add|rm (files in skills/) ---
+            qp = query.split()
+            if qp[0] in ("/skill", "/s") and len(qp) > 1 and qp[1] in ("add", "rm", "remove", "list"):
+                if qp[1] == "list":
+                    for cat, names in sorted(skills.list_skills(SKILLS_DIR).items()):
+                        print(f"  \033[1m{cat:<10}\033[0m \033[2m{' · '.join(names)}\033[0m")
+                    print("\033[2m  load one with /skill <name>, install with /skill add <name> <owner/repo|url>\033[0m\n")
+                elif qp[1] == "add" and len(qp) >= 4:
+                    try:
+                        dest = skills.install_skill(qp[2], qp[3], SKILLS_DIR)
+                        print(f"\033[1;32m[skill] installed '{qp[2]}' → {dest.replace(home_dir, '~', 1)} — load with /skill {qp[2]}\033[0m\n")
+                    except Exception as e:
+                        print(f"\033[1;31m[skill] {e}\033[0m\n")
+                elif qp[1] in ("rm", "remove") and len(qp) >= 3:
+                    if skills.remove_skill(qp[2], SKILLS_DIR):
+                        print(f"\033[1;32m[skill] '{qp[2]}' removed\033[0m\n")
+                    else:
+                        print(f"\033[1;33m[skill] no custom skill '{qp[2]}' (only skills/custom/ can be removed)\033[0m\n")
+                else:
+                    print("\033[1;33m[skill] usage: /skill list · /skill add <name> <owner/repo|url> · /skill rm <name>\033[0m\n")
+                continue
+
+            if query in ("/skill", "/s") or query.startswith(("/skill ", "/s ")):
                 res = subprocess.run([sys.executable, f"{CFG_DIR}/modules/ai-agent-skills", safe_name, query], input=json.loads(res.stdout.strip()) if res.stdout.strip() else json.dumps(chat_history), stdout=subprocess.PIPE, text=True)
                 if res.stdout.strip():
                     try:
@@ -352,10 +474,10 @@ def run_interactive_chat(args: list):
                     except Exception as e:
                         print(f"Error loading session: {e}")
                 continue
-            if query.startswith("-save"):
-                subprocess.run([sys.executable, f"{CFG_DIR}/modules/ai-agent-sessions", "save", safe_name, query.replace("-save", "").strip()], input=json.dumps(chat_history), text=True)
+            if query.startswith(("/save", "-save")):
+                subprocess.run([sys.executable, f"{CFG_DIR}/modules/ai-agent-sessions", "save", safe_name, (query.split(None, 1)[1].strip() if " " in query else "")], input=json.dumps(chat_history), text=True)
                 continue
-            if query in ("-load", "-timeline"):
+            if query in ("/load", "/timeline", "-load", "-timeline"):
                 res = subprocess.run([sys.executable, f"{CFG_DIR}/modules/ai-agent-sessions", "load", safe_name], stdin=sys.stdin, stdout=subprocess.PIPE, text=True)
                 if res.stdout.strip():
                     try:
@@ -411,7 +533,7 @@ def run_interactive_chat(args: list):
                 except Exception:
                     pass
             # Explicitly passes your dynamic show_stats state parameter
-            ans = stream_llm_response(core.prune_history(chat_history), prefix="Agent:" if is_agent else "AI:", show_stats=show_stats)
+            ans = stream_llm_response(core.prune_history(chat_history), prefix="", show_stats=show_stats)
             if ans:
                 chat_history.append({"role": "assistant", "content": ans})
                 if is_agent:
@@ -437,13 +559,25 @@ def run_interactive_chat(args: list):
                         except Exception:
                             pass
     except KeyboardInterrupt:
+        ui.bottom_input_off()
         print("\n\r\033[1;33mExiting conversation.\033[0m")
         sys.exit(0)
+    finally:
+        ui.bottom_input_off()
 
 
 def run_direct_query(args: list):
     """Executes a direct shell query command, explicitly disabling the speed test output."""
     query_parts = args[1:]
+    # One-shot team dispatch: `ai @debug why is this failing …` / `ai /team rm x`
+    if query_parts and query_parts[0] == "/team":
+        import agent_roles as roles
+        roles.team_command(" ".join(query_parts))
+        sys.exit(0)
+    if query_parts and query_parts[0].startswith("@"):
+        import agent_roles as roles
+        if roles.dispatch(" ".join(query_parts)):
+            sys.exit(0)
     active_system_prompt = BASE_PROMPT
     if query_parts and query_parts[-1].startswith("-"):
         skill_content = skills.load_skill_content(query_parts[-1].lstrip("-").lower(), SKILLS_DIR, CFG_DIR)

@@ -1,0 +1,12 @@
+# Keep the deploy/Dockerfile.api build context small — it only COPYs
+# modules/, server/, and agents.json.
+gui/node_modules
+gui/.next
+.sessions
+.git
+tools
+skills
+projects
+__pycache__
+*.pyc
+.env

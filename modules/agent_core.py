@@ -107,7 +107,7 @@ def stream(messages, prefix, gkey, spinner_class, show_stats: bool = True):
                         if first:
                             spinner.stop()
                             if sys.stdout.isatty():
-                                sys.stdout.write(f"\r\x1b[2K\r\033[1;32m{prefix}\033[0m ")
+                                sys.stdout.write("\r\x1b[2K\r" + (f"\033[1;32m{prefix}\033[0m " if prefix else ""))
                                 sys.stdout.flush()
                             first = False
                             if speed_test and show_stats:
@@ -203,7 +203,7 @@ def stream_claude(messages, prefix, spinner, show_stats: bool = True):
                     if first:
                         spinner.stop()
                         if sys.stdout.isatty():
-                            sys.stdout.write(f"\r\x1b[2K\r\033[1;32m{prefix}\033[0m ")
+                            sys.stdout.write("\r\x1b[2K\r" + (f"\033[1;32m{prefix}\033[0m " if prefix else ""))
                             sys.stdout.flush()
                         first = False
                         if speed_test and show_stats:
@@ -218,7 +218,7 @@ def stream_claude(messages, prefix, spinner, show_stats: bool = True):
         spinner.stop()
         if not acc and result_text:
             if sys.stdout.isatty():
-                sys.stdout.write(f"\r\x1b[2K\r\033[1;32m{prefix}\033[0m ")
+                sys.stdout.write("\r\x1b[2K\r" + (f"\033[1;32m{prefix}\033[0m " if prefix else ""))
             print(result_text, end="")
             acc.append(result_text)
         if not acc:
@@ -296,7 +296,7 @@ def stream_codex(messages, prefix, spinner, show_stats: bool = True):
         if not ans:
             return None
         if sys.stdout.isatty():
-            sys.stdout.write(f"\r\x1b[2K\r\033[1;32m{prefix}\033[0m ")
+            sys.stdout.write("\r\x1b[2K\r" + (f"\033[1;32m{prefix}\033[0m " if prefix else ""))
         print(ans)
         return ans
     except KeyboardInterrupt:
@@ -372,7 +372,6 @@ def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", sho
             sys.stderr.write(f"\033[90m[sys] {backend} backend failed, falling back.\033[0m\n")
 
         gkey = os.environ.get("GEMINI_API_KEY")
-        dkey = os.environ.get("DEEPSEEK_API_KEY")
         okey = os.environ.get("OPENROUTER_API_KEY")
 
         # Gemini's native interactions API (server-side session memory) only
@@ -393,14 +392,6 @@ def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", sho
                 os.environ.get("CLOUD_MODEL", "gemini-3.1-flash-lite"),
                 {},
                 30
-            )
-        if dkey:
-            named["deepseek"] = (
-                "https://api.deepseek.com/chat/completions",
-                {"Authorization": f"Bearer {dkey}"},
-                os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"),
-                {},
-                180
             )
         if okey:
             named["openrouter"] = (
@@ -439,7 +430,7 @@ def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", sho
                     spinner.start()
                     with urlreq.urlopen(req, timeout=timeout) as response:
                         try:
-                            p = "gemini" if "generativelanguage" in url else "openrouter" if "openrouter" in url else "deepseek" if "api.deepseek" in url else None
+                            p = "gemini" if "generativelanguage" in url else "openrouter" if "openrouter" in url else None
                             if p and cfg_dir:
                                 with open(os.path.join(cfg_dir, ".request_log"), "a", encoding="utf-8") as lf:
                                     lf.write(f"{int(time.time())}|{p}\n")
@@ -454,7 +445,7 @@ def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", sho
                                 if first:
                                     spinner.stop()
                                     if sys.stdout.isatty():
-                                        sys.stdout.write(f"\r\x1b[2K\r\033[1;32m{prefix}\033[0m ")
+                                        sys.stdout.write("\r\x1b[2K\r" + (f"\033[1;32m{prefix}\033[0m " if prefix else ""))
                                         sys.stdout.flush()
                                     first = False
                                     if speed_test and show_stats:

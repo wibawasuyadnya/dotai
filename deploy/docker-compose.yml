@@ -1,0 +1,43 @@
+# Local-AI multi-agent stack for a VPS.
+#   cp .env.example .env   (set OPENROUTER_API_KEY, SITE_ADDRESS, GUI_USER, GUI_PASS_HASH)
+#   docker compose up -d --build
+# Caddy is the only exposed service; it serves the GUI and proxies /api to the
+# Python server, protected by basic auth.
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    volumes:
+      - sessions:/root/.config/local-ai/.sessions
+    restart: unless-stopped
+
+  gui:
+    build:
+      context: ../gui
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SITE_ADDRESS=${SITE_ADDRESS:-:80}
+      - GUI_USER=${GUI_USER:-admin}
+      - GUI_PASS_HASH=${GUI_PASS_HASH}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - gui
+    restart: unless-stopped
+
+volumes:
+  sessions:
+  caddy_data:
+  caddy_config:

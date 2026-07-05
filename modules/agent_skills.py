@@ -41,6 +41,71 @@ def load_skill_content(skills_str: str, skills_dir: str, cfg_dir: str) -> str:
                 sys.stderr.write(f"\033[1;31mError loading skill '{skill}': {e}\033[0m\n")
     return "\n\n".join(contents)
 
+# ── Skill management (/skill add|rm|list) ────────────────────────────────────
+
+def _strip_frontmatter(text: str) -> str:
+    if text.startswith("---"):
+        parts = text.split("---", 2)
+        if len(parts) == 3:
+            return parts[2].strip() + "\n"
+    return text
+
+
+def install_skill(name: str, source: str, skills_dir: str) -> str:
+    """Installs a skill from a raw URL or GitHub `owner/repo` shorthand into
+    skills/custom/<name>.md. Returns the saved path (raises on failure)."""
+    import urllib.request
+    name = name.lower().strip()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,31}", name):
+        raise ValueError("skill name must be lowercase letters/digits/-/_")
+    if source.startswith(("http://", "https://")):
+        candidates = [source]
+    else:  # owner/repo — try the common skill file layouts
+        base = f"https://raw.githubusercontent.com/{source.strip('/')}"
+        candidates = [f"{base}/main/skills/{name}/SKILL.md",
+                      f"{base}/main/SKILL.md",
+                      f"{base}/main/{name}.md",
+                      f"{base}/master/skills/{name}/SKILL.md",
+                      f"{base}/master/SKILL.md"]
+    text, last_err = "", ""
+    for url in candidates:
+        try:
+            with urllib.request.urlopen(url, timeout=20) as r:
+                text = r.read().decode("utf-8", errors="replace")
+            break
+        except Exception as e:
+            last_err = f"{url}: {e}"
+    if not text:
+        raise RuntimeError(f"could not fetch skill — last error: {last_err}")
+    dest_dir = os.path.join(skills_dir, "custom")
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, f"{name}.md")
+    with open(dest, "w", encoding="utf-8") as f:
+        f.write(_strip_frontmatter(text))
+    return dest
+
+
+def remove_skill(name: str, skills_dir: str) -> bool:
+    """Removes a skill from skills/custom/ only (built-ins are protected)."""
+    path = os.path.join(skills_dir, "custom", f"{name.lower().strip()}.md")
+    if os.path.isfile(path):
+        os.remove(path)
+        return True
+    return False
+
+
+def list_skills(skills_dir: str) -> dict:
+    """{category: [skill names]} for every .md under skills/."""
+    out = {}
+    for root, _, files in os.walk(skills_dir):
+        rel = os.path.relpath(root, skills_dir)
+        cat = rel.split(os.sep)[0] if rel != "." else ""
+        names = sorted(f[:-3] for f in files if f.endswith(".md"))
+        if names:
+            out.setdefault(cat or "(root)", []).extend(names)
+    return out
+
+
 def run_local_tool(cmd: str) -> str:
     try:
         sanitized = re.sub(r'\|\s*(leaf|mdcat|cat|glow)\b.*$', '', cmd.strip()).strip()

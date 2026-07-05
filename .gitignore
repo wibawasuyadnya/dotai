@@ -1,3 +1,10 @@
+# Hidden files/dirs never get committed (.claude, .DS_Store, logs, local state…)
+# — except the whitelisted ones below that the repo/deploy actually needs
+.*
+!.gitignore
+!.env.example
+!.dockerignore
+
 # API keys live in .env — never commit it (.env.example is the safe template)
 .env
 
@@ -15,3 +22,12 @@ index-map-local-ai.txt
 # Ignore Python cache directories and bytecode
 __pycache__/
 *.pyc
+
+# Multi-agent app: local state and build artifacts
+.sessions/
+mcp.json
+.venv/
+gui/node_modules/
+gui/.next/
+gui/next-env.d.ts
+gui/tsconfig.tsbuildinfo

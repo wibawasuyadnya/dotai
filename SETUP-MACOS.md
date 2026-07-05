@@ -1,4 +1,7 @@
-# macOS Setup Notes (this machine)
+# macOS Setup Notes (this machine) — DotAI
+
+Project rebranded "DotAI" on 2026-07-05 (was "Local-AI Agent"); command is
+still `ai` and the config path is still `~/.config/local-ai`.
 
 This repo lives in `~/Documents/local-ai-main`, symlinked to `~/.config/local-ai`
 (the path the code hardcodes). The hook is sourced from `~/.zshrc`, and
@@ -6,9 +9,9 @@ This repo lives in `~/Documents/local-ai-main`, symlinked to `~/.config/local-ai
 
 Full usage documentation is in [README.md](README.md). Machine-specific facts:
 
-- **Hardware**: M4 Pro, 24 GB RAM — 14B Q4 models fit; DeepSeek V4 (284B MoE) does not, so it's used via API only.
-- **Backends configured in `.env`** (repo root, gitignored): `AI_BACKEND=claude` default (sonnet, via `claude` CLI account login), DeepSeek direct API (`deepseek-v4-flash`), OpenRouter (`deepseek/deepseek-v4-flash`), local Hermes-4-14B. Gemini intentionally unused.
-- **DeepSeek direct API needs a balance top-up** (platform.deepseek.com) — the key is valid but returns HTTP 402 until then. The same model works via OpenRouter (`aio`) in the meantime.
-- **Aliases**: `aic` (Claude) · `aid` (DeepSeek) · `aio` (OpenRouter) · `ail` (local Hermes).
+- **Hardware**: M4 Pro, 24 GB RAM — 14B Q4 models fit; DeepSeek V4 (284B MoE) does not, so it's used via OpenRouter only.
+- **Backends configured in `.env`** (repo root, gitignored): `AI_BACKEND=openrouter` default (`deepseek/deepseek-v4-flash`), Claude via `claude` CLI account login, local Hermes-4-14B. DeepSeek direct API removed — all DeepSeek models go through OpenRouter (single top-up balance). Gemini intentionally unused.
+- **Aliases**: `aic` (Claude) · `aio` (OpenRouter) · `ail` (local Hermes) · `ais` (API server :8765).
+- **Multi-agent app** (added 2026-07-05, GUI-only — TUI was removed by choice): `agents.json` roles + `.sessions/` state; GUI in `gui/` (Next.js 15 + Electron 37 — on npm 11 run `npm approve-scripts electron && npm rebuild electron` once, and if the Electron binary check still fails, extract `~/Library/Caches/electron/*/electron-*.zip` into `gui/node_modules/electron/dist` with `ditto` and write `path.txt`).
 - **Local model**: `./start-hermes.sh` serves Hermes-4-14B Q4_K_M on :8080; the ~8.8 GB GGUF is already cached in `~/.cache/huggingface`.
-- **Rate-limit escape hatch**: if Claude is waiting for token reset, `aid <question>` — or just keep typing, the cascade falls through to DeepSeek/local on failure.
+- **Rate-limit escape hatch**: if Claude is waiting for token reset, `aio <question>` — or just keep typing, the cascade falls through to OpenRouter/local on failure.

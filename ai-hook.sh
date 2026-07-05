@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local-Ai Agent Hook v0.8.9.12
+# DotAI Agent Hook v0.9.0
 
 [[ $- != *i* ]] && return
 
@@ -15,10 +15,12 @@ command -v python3 >/dev/null 2>&1 && _AI_PYTHON_BIN="python3" || _AI_PYTHON_BIN
 # Quick backend switches
 alias aic='AI_BACKEND=claude ai'
 alias aix='AI_BACKEND=codex ai'
-alias aid='AI_BACKEND=deepseek ai'
 alias aio='AI_BACKEND=openrouter ai'
 alias aig='AI_BACKEND=gemini ai'
 alias ail='AI_BACKEND=local ai'
+
+# Multi-agent API server (backend for the gui/ web + Electron app)
+alias ais='"$_AI_PYTHON_BIN" "$_AI_DIR/server/server.py"'
 
 _ai_cleanup_stale() {
     [[ -n "$ZSH_VERSION" ]] && setopt local_options null_glob

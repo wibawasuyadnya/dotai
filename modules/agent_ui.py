@@ -1,6 +1,8 @@
 # File: ~/.config/local-ai/modules/agent_ui.py
 import os
+import shutil
 import sys
+import textwrap
 import threading
 import time
 import select
@@ -91,6 +93,90 @@ def get_key() -> str:
             tty_file.close()
     return char_bytes.decode("utf-8", errors="ignore")
 
+# ── Bottom-pinned composer (opencode-style, via DECSTBM scroll region) ──────
+# The last two terminal rows are reserved: ❯ composer + dim statusline.
+# Content scrolls in the region above them — no TUI framework involved.
+
+_RESERVED = 2
+_region_active = False
+_region_rows = 0
+
+
+def _term():
+    return shutil.get_terminal_size((80, 24))
+
+
+def bottom_input_on() -> None:
+    """(Re)establish the scroll region above the reserved bottom rows."""
+    global _region_active, _region_rows
+    if not sys.stdout.isatty():
+        return
+    rows = _term().lines
+    if _region_active and _region_rows == rows:
+        return
+    if not _region_active:
+        # First enable: push content up so the reserved rows start empty
+        sys.stdout.write("\n" * _RESERVED + f"\033[{_RESERVED}A")
+    sys.stdout.write("\0337" + f"\033[1;{max(3, rows - _RESERVED)}r" + "\0338")
+    _region_active, _region_rows = True, rows
+    sys.stdout.flush()
+
+
+def bottom_input_off() -> None:
+    """Reset the scroll region and park the cursor on a clean last row."""
+    global _region_active
+    if not sys.stdout.isatty() or not _region_active:
+        return
+    rows = _term().lines
+    sys.stdout.write(f"\033[r\033[{rows};1H\033[2K\r")
+    _region_active = False
+    sys.stdout.flush()
+
+
+def composer_prepare(status: str) -> None:
+    """Save the content cursor, draw the statusline, park on the composer row.
+    Call input() right after; call composer_done() once it returns."""
+    if not sys.stdout.isatty():
+        return
+    bottom_input_on()
+    t = _term()
+    rows, cols = t.lines, t.columns
+    sys.stdout.write("\0337")
+    sys.stdout.write(f"\033[{rows};1H\033[2K\033[2m{status[:cols - 1]}\033[0m")
+    sys.stdout.write(f"\033[{rows - 1};1H\033[2K")
+    sys.stdout.flush()
+
+
+def composer_done() -> None:
+    """Clear the composer rows and return the cursor to the content area."""
+    if not sys.stdout.isatty() or not _region_active:
+        return
+    rows = _term().lines
+    sys.stdout.write(f"\033[{rows - 1};1H\033[2K\033[{rows};1H\033[2K")
+    sys.stdout.write("\0338")
+    sys.stdout.flush()
+
+
+def current_model_name() -> str:
+    """The model the main chat effectively talks to (mirrors the cascade)."""
+    backend = os.environ.get("AI_BACKEND", "").strip().lower()
+    gkey = os.environ.get("GEMINI_API_KEY")
+    okey = os.environ.get("OPENROUTER_API_KEY")
+    if backend == "claude":
+        return f"claude ({os.environ.get('CLAUDE_MODEL', 'sonnet')})"
+    if backend == "codex":
+        return f"codex ({os.environ.get('CODEX_MODEL', 'default')})"
+    if backend == "openrouter" and okey:
+        return os.environ.get("OPENROUTER_MODEL", "openrouter/free")
+    if backend == "local":
+        return "local-model"
+    if gkey:
+        return os.environ.get("CLOUD_MODEL", "gemini-3.1-flash-lite")
+    if okey:
+        return os.environ.get("OPENROUTER_MODEL", "openrouter/free")
+    return "local-model"
+
+
 def draw_session_box(
     workspace_path: str,
     home_dir: str,
@@ -101,70 +187,38 @@ def draw_session_box(
     active_system_prompt: str,
     clean_name: str
 ) -> None:
-    """Draws a clean system status and information frame in the console."""
-    version = ""
-    main_script_path = os.path.join(home_dir, ".config", "local-ai", "ai-agent.py")
-    if os.path.exists(main_script_path):
-        try:
-            with open(main_script_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    match = re.search(r"Local-Ai Agent\s+(v[0-9.]+)", line, re.I)
-                    if match:
-                        version = match.group(1)
-                        break
-        except Exception:
-            pass
-
+    """DotAI banner left, dim context right (opencode-style split)."""
+    cols = shutil.get_terminal_size((80, 24)).columns
     display_dir = workspace_path
     if display_dir.startswith(home_dir):
         display_dir = display_dir.replace(home_dir, "~", 1)
-    if len(display_dir) > 28:
-        display_dir = "..." + display_dir[-25:]
 
-    backend = os.environ.get("AI_BACKEND", "").strip().lower()
-    gkey = os.environ.get("GEMINI_API_KEY")
-    dkey = os.environ.get("DEEPSEEK_API_KEY")
-    okey = os.environ.get("OPENROUTER_API_KEY")
-    if backend == "claude":
-        model_name = f"claude ({os.environ.get('CLAUDE_MODEL', 'sonnet')})"
-    elif backend == "codex":
-        model_name = f"codex ({os.environ.get('CODEX_MODEL', 'default')})"
-    elif backend == "deepseek" and dkey:
-        model_name = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
-    elif backend == "openrouter" and okey:
-        model_name = os.environ.get("OPENROUTER_MODEL", "openrouter/free")
-    elif backend == "local":
-        model_name = "local-model"
-    elif gkey:
-        model_name = os.environ.get("CLOUD_MODEL", "gemini-3.1-flash-lite")
-    elif dkey:
-        model_name = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
-    elif okey:
-        model_name = os.environ.get("OPENROUTER_MODEL", "openrouter/free")
-    else:
-        model_name = "local-model"
+    right_parts = [current_model_name()]
+    if clean_name:
+        right_parts.append(clean_name)
+    if is_agent:
+        right_parts.append(f"mem {tpm_count}f/{db_turns}t" if memory_active else "mem off")
+    right_parts.append(display_dir)
+    left_plain = "● dotai"
+    right_plain = " · ".join(right_parts)
+    pad = max(2, cols - len(left_plain) - len(right_plain))
+    print(f"\033[1;36m●\033[0m \033[1mdotai\033[0m{' ' * pad}\033[2m{right_plain}\033[0m\n")
 
-    box_width = 46
-    title_line = f" >_ Local-AI Agent ({version})" if version else " >_ Local-AI Agent"
-    model_line = f" model:     {model_name}"
-    dir_line   = f" directory: {display_dir}"
-    skill_line = f" skill:     {clean_name}" if clean_name else " skill:     default"
-    
-    # Consolidates both factual and semantic database memory turns cleanly
-    mem_status = f"active ({tpm_count} facts, {db_turns} turns)" if memory_active else "disabled"
-    mem_line   = f" database:  {mem_status}" if is_agent else " database:  stateless"
-    
-    print("\033[1;36m╭" + "─" * box_width + "╮\033[0m")
-    print(f"\033[1;36m│\033[0m \033[1;37m{title_line:<{box_width-1}}\033[0m\033[1;36m│\033[0m")
-    print(f"\033[1;36m│\033[0m{' ':<{box_width}}\033[1;36m│\033[0m")
-    print(f"\033[1;36m│\033[0m \033[2m{model_line:<{box_width-1}}\033[0m\033[1;36m│\033[0m")
-    print(f"\033[1;36m│\033[0m \033[2m{dir_line:<{box_width-1}}\033[0m\033[1;36m│\033[0m")
-    print(f"\033[1;36m│\033[0m \033[2m{skill_line:<{box_width-1}}\033[0m\033[1;36m│\033[0m")
-    print(f"\033[1;36m│\033[0m \033[2m{mem_line:<{box_width-1}}\033[0m\033[1;36m│\033[0m")
-    print("\033[1;36m╰" + "─" * box_width + "╯\033[0m")
-    
-    approx_tokens = len(active_system_prompt) // 4
-    print(f"\033[2m[sys] Startup context: {approx_tokens:,} tokens | Ctrl+C to exit.\033[0m\n")
+
+def echo_user_block(query: str) -> None:
+    """Renders the submitted message as an opencode-style shaded block with a
+    left accent bar (the typed line itself lives on the composer row)."""
+    if not sys.stdout.isatty():
+        return
+    cols = shutil.get_terminal_size((80, 24)).columns
+    lines = []
+    for ln in query.splitlines() or [""]:
+        lines.extend(textwrap.wrap(ln, max(10, cols - 4)) or [""])
+    # Thin 1px accent bar, single-line block (no padding rows)
+    bar = "\033[38;5;110;48;5;235m▏\033[0m\033[48;5;235m"
+    for ln in lines:
+        print(f"{bar} {ln.ljust(cols - 3)}\033[0m")
+    print()
 
 
 def confirm_tool(tool: str) -> bool:

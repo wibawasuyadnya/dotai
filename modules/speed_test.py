@@ -4,6 +4,12 @@ import sys
 
 _start_time = None
 _token_count = 0
+_label = ""
+
+def set_label(label: str) -> None:
+    """Model/backend tag shown on the end-of-turn status line."""
+    global _label
+    _label = label or ""
 
 def start() -> None:
     """Begins the timer and resets the token count."""
@@ -31,8 +37,9 @@ def end() -> None:
         
     tps = _token_count / elapsed
     
-    # Print statistics in dim gray below the final answer block
-    sys.stdout.write(f"\033[90m [{_token_count} tokens | {elapsed:.2f}s | {tps:.2f} t/s]\033[0m\n")
+    # Opencode-style dim status line below the answer: ▪ model · tokens · speed
+    tag = f"{_label} · " if _label else ""
+    sys.stdout.write(f"\033[2m▪ {tag}{_token_count} tok · {elapsed:.1f}s · {tps:.1f} t/s\033[0m\n")
     sys.stdout.flush()
     
     # Clean up state
