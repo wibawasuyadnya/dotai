@@ -27,7 +27,6 @@ __pycache__/
 .sessions/
 mcp.json
 .venv/
-gui/node_modules/
-gui/.next/
-gui/next-env.d.ts
-gui/tsconfig.tsbuildinfo
+
+# GUI app stays local-only (not published to GitHub)
+gui/
