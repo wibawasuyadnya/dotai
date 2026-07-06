@@ -194,6 +194,13 @@ def draw_session_box(
         display_dir = display_dir.replace(home_dir, "~", 1)
 
     right_parts = [current_model_name()]
+    try:
+        import agent_usage
+        spend = agent_usage.header_spend()
+        if spend:
+            right_parts.append(spend)
+    except Exception:
+        pass
     if clean_name:
         right_parts.append(clean_name)
     if is_agent:

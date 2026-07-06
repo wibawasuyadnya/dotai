@@ -69,6 +69,28 @@ except ImportError as e:
 STOP_WORDS = {"is", "what", "it", "do", "any", "i", "have", "the", "a", "an", "on", "to", "for", "me", "you", "my", "your", "we", "us", "are", "about", "in", "how"}
 
 
+def workspace_safe_name(workspace_path: str, home_dir: str) -> str:
+    """Derives the per-workspace database key from a workspace path."""
+    safe = workspace_path[len(home_dir):].lstrip("/") if workspace_path.startswith(home_dir) else workspace_path
+    return safe.replace("/", "-").strip("-") or "home"
+
+
+def workspace_db_counts(safe_name: str) -> tuple:
+    """Reads (turns, tpm facts) for a workspace from its SQLite database."""
+    turns = facts = 0
+    try:
+        res = subprocess.run([sys.executable, f"{CFG_DIR}/modules/ai-agent-sessions", "get-count", safe_name], capture_output=True, text=True)
+        turns = int(res.stdout.strip())
+    except Exception:
+        pass
+    try:
+        res = subprocess.run([sys.executable, f"{CFG_DIR}/modules/ai-agent-memories", "get-tpm-count", safe_name], capture_output=True, text=True)
+        facts = int(res.stdout.strip())
+    except Exception:
+        pass
+    return turns, facts
+
+
 def sync_md_to_sqlite(workspace: str, workspace_path: str) -> None:
     """Parses manual edits from .agent/tpm.md back into SQLite on startup."""
     md_path = os.path.join(workspace_path, ".agent", "tpm.md")
@@ -190,6 +212,9 @@ HELP_TEXT = """\033[1mcommands\033[0m
   \033[1;36m/skill\033[0m <name>        \033[2mload a skill/role (alias /s)\033[0m
   \033[1;36m/skill list\033[0m          \033[2mall skills · /skill add <name> <owner/repo|url> · /skill rm <name>\033[0m
   \033[1;36m/mcp\033[0m                 \033[2mMCP servers · /mcp add <name> <url|command…> · /mcp tools <name> · /mcp rm\033[0m
+  \033[1;36m/project\033[0m [name]      \033[2mlist projects · focus one (own memory/history) · new name = create\033[0m
+  \033[1;36m/edit\033[0m [on|off]       \033[2mlet the agent edit the focused project's files (writes stay inside it)\033[0m
+  \033[1;36m/usage\033[0m               \033[2mspend per model · today's total · openrouter balance · /usage reset\033[0m
   \033[1;36m/tok\033[0m                 \033[2mtoken count of the conversation\033[0m
   \033[1;36m/stats\033[0m               \033[2mtoggle generation statistics\033[0m
   \033[1;36m/m\033[0m                   \033[2mtoggle long-term memory + TPM\033[0m
@@ -221,8 +246,7 @@ def run_interactive_chat(args: list):
     
     workspace_path = os.environ.get("AI_WORKSPACE_PATH", os.getcwd())
     home_dir = os.path.expanduser("~")
-    safe_name = workspace_path[len(home_dir):].lstrip("/") if workspace_path.startswith(home_dir) else workspace_path
-    safe_name = safe_name.replace("/", "-").strip("-") or "home"
+    safe_name = workspace_safe_name(workspace_path, home_dir)
     
     chat_history = [{"role": "system", "content": active_system_prompt}]
     pending_query = " ".join(args[1:]) if len(args) > 1 else None
@@ -239,20 +263,16 @@ def run_interactive_chat(args: list):
     db_turns = 0
     tpm_count = 0
     if is_agent:
-        try:
-            res = subprocess.run([sys.executable, f"{CFG_DIR}/modules/ai-agent-sessions", "get-count", safe_name], capture_output=True, text=True)
-            db_turns = int(res.stdout.strip())
-        except Exception:
-            pass
-        try:
-            # Query the database to retrieve the count of active compiled facts
-            res_tpm = subprocess.run([sys.executable, f"{CFG_DIR}/modules/ai-agent-memories", "get-tpm-count", safe_name], capture_output=True, text=True)
-            tpm_count = int(res_tpm.stdout.strip())
-        except Exception:
-            pass
-        
+        db_turns, tpm_count = workspace_db_counts(safe_name)
+
+    try:
+        import agent_usage
+        agent_usage.refresh_balance_async()
+    except Exception:
+        agent_usage = None
+
     ui.draw_session_box(workspace_path, home_dir, is_agent, db_turns, tpm_count, memory_active, active_system_prompt, clean_name)
-    
+
     try:
         while True:
             typed = False
@@ -261,8 +281,18 @@ def run_interactive_chat(args: list):
             else:
                 typed = True
                 try:
-                    # Opencode-style: composer pinned to the bottom row
-                    ui.composer_prepare("/help commands · /team agents · /exit quit")
+                    # Opencode-style: composer pinned to the bottom row.
+                    # Statusline carries live per-agent spend (claude/openrouter/local)
+                    status = "/help commands · /team agents · /exit quit"
+                    try:
+                        spend = agent_usage.statusline_spend() if agent_usage else ""
+                        if spend:
+                            status = f"{spend}  ·  /help · /usage · /exit"
+                    except Exception:
+                        pass
+                    if os.environ.get("AI_EDIT_MODE") == "1":
+                        status = f"✎ edit · {status}"
+                    ui.composer_prepare(status)
                     query = input("\x01\033[1;30m\x02❯\x01\033[0m\x02 ").strip()
                 except EOFError:
                     break
@@ -403,6 +433,97 @@ def run_interactive_chat(args: list):
                     roles.team_command(query)
                 else:
                     roles.dispatch(query)
+                continue
+
+            # --- PROJECT FOCUS: /project [name|path] — each project keeps its own
+            # memory, history, and cloud session (workspace switch without restart)
+            if query.split()[0] in ("/project", "/proj", "/projects"):
+                arg = query.split(None, 1)[1].strip() if " " in query else ""
+                projects_root = os.path.join(CFG_DIR, "projects")
+                if not arg or arg == "list":
+                    names = sorted(
+                        d for d in (os.listdir(projects_root) if os.path.isdir(projects_root) else [])
+                        if os.path.isdir(os.path.join(projects_root, d)) and d != "database"
+                    )
+                    for name in names:
+                        p = os.path.join(projects_root, name)
+                        turns, facts = workspace_db_counts(workspace_safe_name(p, home_dir))
+                        mark = "\033[1;36m●\033[0m" if p == workspace_path else " "
+                        print(f"  {mark} \033[1m{name:<24}\033[0m \033[2m{turns} turns · {facts} facts\033[0m")
+                    if not names:
+                        print("\033[2m  no projects yet — /project <name> creates one\033[0m")
+                    print(f"\033[2m  focused: {workspace_path.replace(home_dir, '~', 1)} — switch with /project <name|path>\033[0m\n")
+                    continue
+                # Resolve: an existing project name wins, then a filesystem path,
+                # otherwise a new project directory is created under projects/
+                cand = os.path.expanduser(arg)
+                proj_dir = os.path.join(projects_root, arg)
+                if os.path.isdir(proj_dir):
+                    target = proj_dir
+                elif os.path.isabs(cand) or arg.startswith(("~", "./", "../")) or os.path.isdir(cand):
+                    target = os.path.abspath(cand)
+                else:
+                    target = proj_dir
+                created = not os.path.isdir(target)
+                if created:
+                    try:
+                        os.makedirs(target, exist_ok=True)
+                    except Exception as e:
+                        print(f"\033[1;31m[project] cannot create {target}: {e}\033[0m\n")
+                        continue
+                workspace_path = target
+                os.environ["AI_WORKSPACE_PATH"] = target
+                safe_name = workspace_safe_name(workspace_path, home_dir)
+                chat_history = [{"role": "system", "content": active_system_prompt}]
+                db_turns = tpm_count = 0
+                if is_agent:
+                    sync_md_to_sqlite(safe_name, workspace_path)
+                    db_turns, tpm_count = workspace_db_counts(safe_name)
+                if sys.stdout.isatty():
+                    sys.stdout.write("\033[2J\033[H")
+                ui.draw_session_box(workspace_path, home_dir, is_agent, db_turns, tpm_count, memory_active, active_system_prompt, clean_name)
+                print(f"\033[1;32m[project] {'created and ' if created else ''}focused: {workspace_path.replace(home_dir, '~', 1)}\033[0m\n")
+                continue
+
+            # --- EDIT MODE: /edit [on|off] — let the agent modify project files.
+            # claude/codex run as real agents in the focused project; openrouter
+            # and local get read/write/list/run file tools (shell asks first)
+            if query.split()[0] in ("/edit", "/write"):
+                arg = query.split(None, 1)[1].strip().lower() if " " in query else ""
+                if arg not in ("", "on", "off"):
+                    print("\033[1;33m[sys] usage: /edit — toggle · /edit on · /edit off\033[0m\n")
+                    continue
+                cur = os.environ.get("AI_EDIT_MODE") == "1"
+                if arg == "on" or (arg == "" and not cur):
+                    os.environ["AI_EDIT_MODE"] = "1"
+                    backend = os.environ.get("AI_BACKEND", "").strip().lower()
+                    if backend == "claude":
+                        engine = f"claude CLI ({os.environ.get('CLAUDE_MODEL', 'sonnet')}), edits auto-approved"
+                    elif backend == "codex":
+                        engine = "codex CLI, workspace-write sandbox"
+                    elif backend == "local" or not os.environ.get("OPENROUTER_API_KEY"):
+                        engine = "local llama-server + file tools"
+                    else:
+                        engine = f"{os.environ.get('OPENROUTER_MODEL', 'openrouter/free')} + file tools"
+                    print(f"\033[1;32m[sys] Edit mode ON — {engine}\033[0m")
+                    print(f"\033[2m[sys] writes are confined to {workspace_path.replace(home_dir, '~', 1)} · shell commands ask first · /edit off to leave\033[0m\n")
+                else:
+                    os.environ.pop("AI_EDIT_MODE", None)
+                    print("\033[1;33m[sys] Edit mode OFF — back to read-only chat.\033[0m\n")
+                continue
+
+            # --- SPEND LEDGER: /usage — per-model tokens & cost, today's total,
+            # and the live OpenRouter credit balance
+            if query.split()[0] in ("/usage", "/cost", "/spend"):
+                if not agent_usage:
+                    print("\033[1;31m[usage] ledger module unavailable\033[0m\n")
+                    continue
+                arg = query.split(None, 1)[1].strip().lower() if " " in query else ""
+                if arg == "reset":
+                    agent_usage.reset()
+                    print("\033[1;32m[usage] spend ledger reset.\033[0m\n")
+                else:
+                    agent_usage.print_summary()
                 continue
 
             # --- MCP SERVERS: /mcp [add|rm|tools] (config in mcp.json) ---

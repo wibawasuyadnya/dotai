@@ -15,6 +15,33 @@ try:
 except ImportError:
     speed_test = None
 
+# --- OPTIONAL SPEND/USAGE LEDGER HOOK ---
+try:
+    import agent_usage as usage_log
+except ImportError:
+    usage_log = None
+
+
+def _log_turn_usage(model: str, in_tok: int, out_tok: int, cost: float,
+                    show_stats: bool, ctx_used: int = None) -> None:
+    """Records a finished turn in the spend ledger and, when stats are on,
+    prints the dim usage line (tokens, turn cost, today's spend, context left)."""
+    if not usage_log:
+        return
+    try:
+        usage_log.record(model, in_tok, out_tok, cost)
+        usage_log.refresh_balance_async(min_age=10)
+        if show_stats and sys.stdout.isatty():
+            ctx_max = None
+            if ctx_used is not None:
+                try:
+                    ctx_max = int(os.environ.get("AI_MAX_TOKENS", 8192))
+                except Exception:
+                    ctx_max = 8192
+            print(usage_log.turn_line(in_tok, out_tok, cost, ctx_used, ctx_max))
+    except Exception:
+        pass
+
 # --- FAST-PATH BYTE EXTRACTOR ---
 def extract_stream_content(line_bytes: bytes) -> str:
     """Performs raw byte-level searching to extract streaming tokens.
@@ -121,7 +148,13 @@ def stream(messages, prefix, gkey, spinner_class, show_stats: bool = True):
             print("")
             if speed_test and show_stats:
                 speed_test.end()
-            
+
+            # Interactions API sends no usage object — estimate at ~4 chars/token
+            ans_text = "".join(acc)
+            in_est = (len(body.get("input", "")) + len(body.get("system_instruction", ""))) // 4
+            ctx_est = (sum(len(m.get("content", "")) for m in messages) + len(ans_text)) // 4
+            _log_turn_usage(model, in_est, len(ans_text) // 4, 0.0, show_stats, ctx_est)
+
             if resolved_id:
                 try:
                     os.makedirs(os.path.dirname(sf), exist_ok=True)
@@ -143,9 +176,22 @@ def stream(messages, prefix, gkey, spinner_class, show_stats: bool = True):
         return None
 
 
+EDIT_SYSTEM_ADD = (
+    "\n\n### EDIT MODE (overrides any read-only rules above):\n"
+    "You are a coding agent with write access to the project at {ws}. "
+    "Use your tools to inspect and modify files directly instead of describing changes. "
+    "After editing, reply briefly: what you changed, where, and why."
+)
+
+
+def edit_mode_on() -> bool:
+    return os.environ.get("AI_EDIT_MODE") == "1"
+
+
 def stream_claude(messages, prefix, spinner, show_stats: bool = True):
     """Streams a chat turn through the local Claude Code CLI, which authenticates
-    with your claude.ai account login (no API key needed)."""
+    with your claude.ai account login (no API key needed). In edit mode the CLI
+    runs inside the focused project with file tools enabled."""
     import shutil
     import subprocess
     claude_bin = shutil.which("claude")
@@ -169,22 +215,33 @@ def stream_claude(messages, prefix, spinner, show_stats: bool = True):
     if history:
         prompt = f"### Prior conversation:\n{history}\n\n### Current message:\n{prompt}"
 
+    edit = edit_mode_on()
+    workspace = os.environ.get("AI_WORKSPACE_PATH", os.getcwd())
     cmd = [
         claude_bin, "-p",
         "--model", os.environ.get("CLAUDE_MODEL", "sonnet"),
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-        # Chat only: block agentic tools so it can't read files or run commands
-        "--disallowed-tools", "Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit",
     ]
+    if edit:
+        # Full agent in the focused project: edits auto-approved, shell allowed
+        cmd += ["--permission-mode", "acceptEdits",
+                "--allowedTools", "Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash,TodoWrite"]
+        system_prompt = (system_prompt or "") + EDIT_SYSTEM_ADD.format(ws=workspace)
+    else:
+        # Chat only: block agentic tools so it can't read files or run commands
+        cmd += ["--disallowed-tools", "Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit"]
     if system_prompt:
         cmd += ["--system-prompt", system_prompt]
 
     proc = None
     acc = []
     first = True
+    result_usage = {}
+    result_cost = 0.0
     try:
         spinner.start()
-        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                text=True, cwd=workspace if edit else None)
         proc.stdin.write(prompt)
         proc.stdin.close()
         result_text = None
@@ -212,9 +269,21 @@ def stream_claude(messages, prefix, spinner, show_stats: bool = True):
                     acc.append(content)
                     if speed_test and show_stats:
                         speed_test.count_token(content)
+            elif data.get("type") == "assistant" and edit:
+                # Surface tool calls (Edit/Write/Bash…) as dim ∗ activity lines
+                for blk in (data.get("message") or {}).get("content") or []:
+                    if isinstance(blk, dict) and blk.get("type") == "tool_use":
+                        inp = blk.get("input") or {}
+                        brief = str(inp.get("file_path") or inp.get("command") or inp.get("pattern") or inp.get("path") or "")[:100]
+                        spinner.stop()
+                        print(f"\033[2m∗ {blk.get('name')} {brief}\033[0m")
+                        spinner.start()
+                        first = True  # next text delta re-clears the spinner row
             elif data.get("type") == "result":
                 result_text = data.get("result")
-        proc.wait(timeout=30)
+                result_usage = data.get("usage") or {}
+                result_cost = data.get("total_cost_usd") or 0.0
+        proc.wait(timeout=600 if edit else 30)
         spinner.stop()
         if not acc and result_text:
             if sys.stdout.isatty():
@@ -226,7 +295,17 @@ def stream_claude(messages, prefix, spinner, show_stats: bool = True):
         print("")
         if speed_test and show_stats:
             speed_test.end()
-        return "".join(acc)
+        ans_text = "".join(acc)
+        in_tok = (
+            (result_usage.get("input_tokens") or 0)
+            + (result_usage.get("cache_read_input_tokens") or 0)
+            + (result_usage.get("cache_creation_input_tokens") or 0)
+        ) or sum(len(m.get("content", "")) for m in messages) // 4
+        out_tok = result_usage.get("output_tokens") or len(ans_text) // 4
+        ctx_est = (sum(len(m.get("content", "")) for m in messages) + len(ans_text)) // 4
+        _log_turn_usage(f"claude:{os.environ.get('CLAUDE_MODEL', 'sonnet')}",
+                        in_tok, out_tok, result_cost, show_stats, ctx_est)
+        return ans_text
     except KeyboardInterrupt:
         spinner.stop()
         if proc:
@@ -260,6 +339,11 @@ def stream_codex(messages, prefix, spinner, show_stats: bool = True):
     if not convo:
         return None
 
+    edit = edit_mode_on()
+    workspace = os.environ.get("AI_WORKSPACE_PATH", os.getcwd())
+    if edit:
+        system_prompt = (system_prompt or "") + EDIT_SYSTEM_ADD.format(ws=workspace)
+
     parts = []
     if system_prompt:
         parts.append(f"### Instructions:\n{system_prompt}")
@@ -276,7 +360,7 @@ def stream_codex(messages, prefix, spinner, show_stats: bool = True):
     tmp.close()
     cmd = [
         codex_bin, "exec",
-        "--sandbox", "read-only", "--skip-git-repo-check",
+        "--sandbox", "workspace-write" if edit else "read-only", "--skip-git-repo-check",
         "--output-last-message", tmp.name,
     ]
     model = os.environ.get("CODEX_MODEL")
@@ -289,7 +373,8 @@ def stream_codex(messages, prefix, spinner, show_stats: bool = True):
 
     try:
         spinner.start()
-        subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        subprocess.run(cmd, capture_output=True, text=True, timeout=600 if edit else 300,
+                       cwd=workspace if edit else None)
         spinner.stop()
         with open(tmp.name, "r", encoding="utf-8") as f:
             ans = f.read().strip()
@@ -298,6 +383,9 @@ def stream_codex(messages, prefix, spinner, show_stats: bool = True):
         if sys.stdout.isatty():
             sys.stdout.write("\r\x1b[2K\r" + (f"\033[1;32m{prefix}\033[0m " if prefix else ""))
         print(ans)
+        # Codex exec reports no usage — estimate at ~4 chars/token, no cost
+        _log_turn_usage(f"codex:{model or 'default'}", len(prompt) // 4, len(ans) // 4,
+                        0.0, show_stats, (len(prompt) + len(ans)) // 4)
         return ans
     except KeyboardInterrupt:
         spinner.stop()
@@ -312,6 +400,158 @@ def stream_codex(messages, prefix, spinner, show_stats: bool = True):
             os.unlink(tmp.name)
         except Exception:
             pass
+
+
+# --- NATIVE EDIT-MODE TOOL LOOP (OpenRouter / local llama-server) ---------
+_EDIT_TOOLS = [
+    {"type": "function", "function": {
+        "name": "read_file",
+        "description": "Read a text file from the project. Returns its content.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string", "description": "Path relative to the project root"}},
+            "required": ["path"]}}},
+    {"type": "function", "function": {
+        "name": "write_file",
+        "description": "Create or overwrite a text file in the project with the given content.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string", "description": "Path relative to the project root"},
+            "content": {"type": "string", "description": "Full new file content"}},
+            "required": ["path", "content"]}}},
+    {"type": "function", "function": {
+        "name": "list_dir",
+        "description": "List files and directories at a path inside the project.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string", "description": "Path relative to the project root, '' for the root"}},
+            "required": []}}},
+    {"type": "function", "function": {
+        "name": "run_command",
+        "description": "Run a shell command in the project root. The user must approve it first.",
+        "parameters": {"type": "object", "properties": {
+            "command": {"type": "string"}},
+            "required": ["command"]}}},
+]
+
+
+def _safe_path(workspace: str, p: str) -> str:
+    """Resolves a tool path and refuses anything outside the project root."""
+    root = os.path.realpath(workspace)
+    full = os.path.realpath(os.path.join(root, p or ""))
+    if full != root and not full.startswith(root + os.sep):
+        raise ValueError(f"path escapes the project: {p}")
+    return full
+
+
+def _run_edit_tool(name: str, args: dict, workspace: str) -> str:
+    import subprocess
+    if name == "read_file":
+        full = _safe_path(workspace, args.get("path", ""))
+        with open(full, "r", encoding="utf-8", errors="replace") as f:
+            return f.read(60000)
+    if name == "write_file":
+        full = _safe_path(workspace, args.get("path", ""))
+        content = args.get("content", "")
+        os.makedirs(os.path.dirname(full) or workspace, exist_ok=True)
+        with open(full, "w", encoding="utf-8") as f:
+            f.write(content)
+        return f"wrote {len(content)} chars to {args.get('path')}"
+    if name == "list_dir":
+        full = _safe_path(workspace, args.get("path", ""))
+        entries = sorted(os.listdir(full))
+        return "\n".join((e + "/" if os.path.isdir(os.path.join(full, e)) else e) for e in entries) or "(empty)"
+    if name == "run_command":
+        cmd = args.get("command", "")
+        if not sys.stdout.isatty() or not ui.confirm_tool(f"$ {cmd}"):
+            return "[denied] the user did not approve this command"
+        res = subprocess.run(cmd, shell=True, cwd=workspace, capture_output=True, text=True, timeout=120)
+        out = (res.stdout or "") + (("\n" + res.stderr) if res.stderr else "")
+        return out[:10000] or f"(exit {res.returncode}, no output)"
+    return f"[error] unknown tool {name}"
+
+
+def edit_turn_tools(messages, prefix, spinner, show_stats: bool = True) -> str or None:
+    """Edit-mode turn for OpenAI-compatible backends (OpenRouter or the local
+    llama-server): non-streaming rounds where the model may call file tools,
+    results go back, repeat until it answers in plain text."""
+    workspace = os.environ.get("AI_WORKSPACE_PATH", os.getcwd())
+    okey = os.environ.get("OPENROUTER_API_KEY")
+    backend = os.environ.get("AI_BACKEND", "").strip().lower()
+    if okey and backend != "local":
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {okey}", "HTTP-Referer": "https://github.com/suyadnya/local-ai"}
+        model = os.environ.get("OPENROUTER_MODEL", "openrouter/free")
+    else:
+        if not ensure_local_server():
+            return None
+        url, headers, model = "http://localhost:8080/v1/chat/completions", {}, "local-model"
+
+    convo = [dict(m) for m in messages]
+    if convo and convo[0]["role"] == "system":
+        convo[0]["content"] += EDIT_SYSTEM_ADD.format(ws=workspace)
+
+    total = {"prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0}
+    resolved_model = None
+    try:
+        for _round in range(10):
+            body = {"model": model, "messages": convo, "tools": _EDIT_TOOLS}
+            if okey and backend != "local":
+                body["usage"] = {"include": True}
+            req = urlreq.Request(url, data=json.dumps(body).encode("utf-8"),
+                                 headers={"Content-Type": "application/json", **headers}, method="POST")
+            spinner.start()
+            try:
+                with urlreq.urlopen(req, timeout=180) as r:
+                    resp = json.loads(r.read().decode("utf-8"))
+            finally:
+                spinner.stop()
+            u = resp.get("usage") or {}
+            for k in ("prompt_tokens", "completion_tokens"):
+                total[k] += u.get(k) or 0
+            total["cost"] += u.get("cost") or 0.0
+            resolved_model = resp.get("model") or resolved_model
+            msg = (resp.get("choices") or [{}])[0].get("message") or {}
+            calls = msg.get("tool_calls")
+            if not calls:
+                ans = msg.get("content") or ""
+                if not ans:
+                    return None
+                if sys.stdout.isatty():
+                    sys.stdout.write("\r\x1b[2K\r" + (f"\033[1;32m{prefix}\033[0m " if prefix else ""))
+                print(ans)
+                ctx_est = (sum(len(m.get("content") or "") for m in convo) + len(ans)) // 4
+                _log_turn_usage(resolved_model or model, total["prompt_tokens"], total["completion_tokens"],
+                                total["cost"], show_stats, ctx_est)
+                return ans
+            convo.append(msg)
+            for tc in calls:
+                fname = tc.get("function", {}).get("name", "")
+                try:
+                    args = json.loads(tc.get("function", {}).get("arguments") or "{}")
+                except Exception:
+                    args = {}
+                brief = str(args.get("path") or args.get("command") or "")[:100]
+                print(f"\033[2m∗ {fname} {brief}\033[0m")
+                try:
+                    result = _run_edit_tool(fname, args, workspace)
+                except Exception as e:
+                    result = f"[tool error] {e}"
+                convo.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result})
+        return None
+    except urlerr.HTTPError as e:
+        spinner.stop()
+        try:
+            detail = e.read(300).decode("utf-8", errors="ignore")
+        except Exception:
+            detail = ""
+        sys.stderr.write(f"\033[90m[sys] edit tools failed: HTTP {e.code} {detail}\033[0m\n")
+        return None
+    except KeyboardInterrupt:
+        spinner.stop()
+        sys.stderr.write("\n\r\x1b[2K\r[sys] Interrupted.\n")
+        return ""
+    except Exception as e:
+        spinner.stop()
+        sys.stderr.write(f"\033[90m[sys] edit tools failed: {e}\033[0m\n")
+        return None
 
 
 def ensure_local_server() -> bool:
@@ -371,6 +611,14 @@ def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", sho
                 return ans
             sys.stderr.write(f"\033[90m[sys] {backend} backend failed, falling back.\033[0m\n")
 
+        # Edit mode on a non-CLI backend: run the native tool loop
+        # (OpenRouter if a key is set, else the local llama-server)
+        if edit_mode_on():
+            ans = edit_turn_tools(messages, prefix, spinner, show_stats)
+            if ans is not None:
+                return ans
+            sys.stderr.write("\033[90m[sys] edit tools unavailable — answering read-only.\033[0m\n")
+
         gkey = os.environ.get("GEMINI_API_KEY")
         okey = os.environ.get("OPENROUTER_API_KEY")
 
@@ -401,7 +649,7 @@ def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", sho
                     "HTTP-Referer": "https://github.com/suyadnya/local-ai"
                 },
                 os.environ.get("OPENROUTER_MODEL", "openrouter/free"),
-                {},
+                {"usage": {"include": True}},
                 180
             )
         named["local"] = ("http://localhost:8080/v1/chat/completions", {}, "local-model", {}, 180)
@@ -436,7 +684,7 @@ def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", sho
                                     lf.write(f"{int(time.time())}|{p}\n")
                         except Exception:
                             pass
-                        first, resolved_model = True, None
+                        first, resolved_model, usage_obj = True, None, None
                         for line in response:
                             if not line.startswith(b"data:"):
                                 continue
@@ -464,6 +712,8 @@ def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", sho
                                     data = json.loads(dec)
                                     if "model" in data and not resolved_model:
                                         resolved_model = data["model"]
+                                    if isinstance(data.get("usage"), dict):
+                                        usage_obj = data["usage"]
                                 except Exception:
                                     pass
                         print("")
@@ -477,7 +727,15 @@ def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", sho
                                 display_model = display_model.replace(target_path, ".../")
                             sys.stdout.write(f"\033[90m[via {display_model}]\033[0m\n")
                             sys.stdout.flush()
-                        return "".join(acc)
+                        ans_text = "".join(acc)
+                        u = usage_obj or {}
+                        prompt_chars = sum(len(m.get("content", "")) for m in messages)
+                        in_tok = u.get("prompt_tokens") or prompt_chars // 4
+                        out_tok = u.get("completion_tokens") or len(ans_text) // 4
+                        _log_turn_usage(resolved_model or model or url.split('/')[2],
+                                        in_tok, out_tok, u.get("cost") or 0.0,
+                                        show_stats, (prompt_chars + len(ans_text)) // 4)
+                        return ans_text
                 except urlerr.HTTPError as e:
                     spinner.stop()
                     if e.code == 429 and retries > 0:

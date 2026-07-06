@@ -434,6 +434,15 @@ def stream_chat(session: dict, user_text: str):
     if session["title"] == "New session" and user_text:
         session["title"] = user_text.strip().replace("\n", " ")[:48]
     _save_session(session)
+    # Global spend ledger (same file the main chat and /usage read)
+    try:
+        import agent_usage
+        agent_usage.record(session.get("model") or agent.get("model") or backend,
+                           usage.get("prompt_tokens", 0),
+                           usage.get("completion_tokens", 0),
+                           usage.get("cost", 0) or 0.0)
+    except Exception:
+        pass
     yield {"type": "done", "usage": session["usage"], "title": session["title"],
            "cost": usage.get("cost", 0)}
 

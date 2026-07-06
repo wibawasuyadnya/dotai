@@ -1,4 +1,6 @@
-<h1 align="center">DotAI</h1>
+<p align="center">
+  <img src="assets/dotai-logo.png" alt="dot.ai" width="420">
+</p>
 
 <p align="center">
   A zero-daemon, multi-backend, multi-agent AI for your terminal.<br>
@@ -312,6 +314,13 @@ frontend you build sees the same conversations.
 > deploying the Docker stack from `deploy/`, copy that folder up alongside
 > the repo — everything else about the deploy is self-contained.
 
+**Branding assets** live in [`assets/`](assets/): `dotai-logo.png` (wordmark),
+`dotai-icon.png` (square app icon), and `favicon/` (full favicon set +
+webmanifest for the web GUI). The local `gui/` folder carries ready-to-use
+copies: `gui/public/` serves the favicons, and `gui/assets/dotai.icns` is the
+macOS icon for Electron packaging (`electron/main.js` already sets the dock
+and window icon in dev).
+
 **Hosting it on a VPS:** the stack ships as Docker containers (API + GUI
 behind a password-protected Caddy proxy), so all your devices share the same
 sessions — see [deploy/README.md](deploy/README.md). Sync the local-only GUI
@@ -353,6 +362,9 @@ rsync -a --exclude node_modules --exclude .next gui/ user@vps:~/local-ai/gui/
 | `/skill list` / `add <name> <owner/repo\|url>` / `rm <name>` | Manage skills (installs to `skills/custom/`) |
 | `/mcp` / `add <name> <url\|command…>` / `tools <name>` / `rm <name>` | Manage MCP servers (`mcp.json`); attach with `/team edit <id> mcp <name>` |
 | `view file <path>` | Read a local file into context |
+| `/project [name\|path]` | List projects or focus one mid-chat — each project keeps its own memory, history, and cloud session; an unknown name creates the project |
+| `/edit [on\|off]` | Edit mode: the agent can modify the focused project's files. Claude/Codex run as full agents in the project (edits auto-approved, `claude`/`codex` CLI); OpenRouter/local get read/write/list/run file tools — writes are confined to the project, shell commands ask for approval |
+| `/usage` | Spend ledger: tokens & cost per model (all time + today) and your live OpenRouter credit balance; `/usage reset` zeroes it |
 | `/save <tag>` / `/load` | Snapshot / roll back the conversation (SQLite) |
 | `/f` `/t` `/b` `/a` | Follow-up / Thinking / Brainstorm / All prompt subroutines |
 | `/clear` `/reset` | Wipe session, history, and memory for this workspace |
