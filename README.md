@@ -348,7 +348,7 @@ rsync -a --exclude node_modules --exclude .next gui/ user@vps:~/local-ai/gui/
 
 | Command | Description |
 | :--- | :--- |
-| `@<role> <msg>` | Message a team agent (`@debug`, `@review`, `@research`, `@chat`); `@<role> /new` starts a fresh session |
+| `@<role> <msg>` | Message a team agent (`@debug`, `@review`, `@research`, `@chat`); `@<role> /new` starts a fresh session. Agents can read project files and run shell commands (`flutter analyze`, tests, …) — each command asks you y/n first |
 | `@<role> /last [from] [note]` | Handoff: send a teammate's last answer to this agent (`@review /last debug find bugs`) |
 | `/team` | List the team agents, their models, and session counts |
 | `/team add [id]` | Create a team agent (wizard asks name, icon, backend, model, prompt) |
@@ -363,7 +363,7 @@ rsync -a --exclude node_modules --exclude .next gui/ user@vps:~/local-ai/gui/
 | `/mcp` / `add <name> <url\|command…>` / `tools <name>` / `rm <name>` | Manage MCP servers (`mcp.json`); attach with `/team edit <id> mcp <name>` |
 | `view file <path>` | Read a local file into context |
 | `/project [name\|path]` | List projects or focus one mid-chat — each project keeps its own memory, history, and cloud session; an unknown name creates the project |
-| `/edit [on\|off]` | Edit mode: the agent can modify the focused project's files. Claude/Codex run as full agents in the project (edits auto-approved, `claude`/`codex` CLI); OpenRouter/local get read/write/list/run file tools — writes are confined to the project, shell commands ask for approval |
+| `/edit [on\|auto\|off]` | Edit mode: the agent can modify the focused project's files. `on` asks you **y/n before every write / shell command** (Claude Code-style permission prompt, via a PreToolUse hook on the `claude` CLI); `auto` skips the prompts; reads are always allowed. Claude/Codex run as full agents in the project; OpenRouter/local get read/write/list/run file tools — writes are confined to the project |
 | `/usage` | Spend ledger: tokens & cost per model (all time + today) and your live OpenRouter credit balance; `/usage reset` zeroes it |
 | `/save <tag>` / `/load` | Snapshot / roll back the conversation (SQLite) |
 | `/f` `/t` `/b` `/a` | Follow-up / Thinking / Brainstorm / All prompt subroutines |

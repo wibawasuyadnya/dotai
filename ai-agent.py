@@ -213,7 +213,7 @@ HELP_TEXT = """\033[1mcommands\033[0m
   \033[1;36m/skill list\033[0m          \033[2mall skills · /skill add <name> <owner/repo|url> · /skill rm <name>\033[0m
   \033[1;36m/mcp\033[0m                 \033[2mMCP servers · /mcp add <name> <url|command…> · /mcp tools <name> · /mcp rm\033[0m
   \033[1;36m/project\033[0m [name]      \033[2mlist projects · focus one (own memory/history) · new name = create\033[0m
-  \033[1;36m/edit\033[0m [on|off]       \033[2mlet the agent edit the focused project's files (writes stay inside it)\033[0m
+  \033[1;36m/edit\033[0m [on|auto|off]  \033[2magent can edit project files — on asks y/n per write, auto doesn't\033[0m
   \033[1;36m/usage\033[0m               \033[2mspend per model · today's total · openrouter balance · /usage reset\033[0m
   \033[1;36m/tok\033[0m                 \033[2mtoken count of the conversation\033[0m
   \033[1;36m/stats\033[0m               \033[2mtoggle generation statistics\033[0m
@@ -291,7 +291,8 @@ def run_interactive_chat(args: list):
                     except Exception:
                         pass
                     if os.environ.get("AI_EDIT_MODE") == "1":
-                        status = f"✎ edit · {status}"
+                        tag = "✎ edit·auto" if os.environ.get("AI_EDIT_CONFIRM") == "0" else "✎ edit"
+                        status = f"{tag} · {status}"
                     ui.composer_prepare(status)
                     query = input("\x01\033[1;30m\x02❯\x01\033[0m\x02 ").strip()
                 except EOFError:
@@ -490,25 +491,28 @@ def run_interactive_chat(args: list):
             # and local get read/write/list/run file tools (shell asks first)
             if query.split()[0] in ("/edit", "/write"):
                 arg = query.split(None, 1)[1].strip().lower() if " " in query else ""
-                if arg not in ("", "on", "off"):
-                    print("\033[1;33m[sys] usage: /edit — toggle · /edit on · /edit off\033[0m\n")
+                if arg not in ("", "on", "auto", "off"):
+                    print("\033[1;33m[sys] usage: /edit — toggle · /edit on (asks y/n) · /edit auto (no prompts) · /edit off\033[0m\n")
                     continue
                 cur = os.environ.get("AI_EDIT_MODE") == "1"
-                if arg == "on" or (arg == "" and not cur):
+                if arg in ("on", "auto") or (arg == "" and not cur):
                     os.environ["AI_EDIT_MODE"] = "1"
+                    os.environ["AI_EDIT_CONFIRM"] = "0" if arg == "auto" else "1"
                     backend = os.environ.get("AI_BACKEND", "").strip().lower()
                     if backend == "claude":
-                        engine = f"claude CLI ({os.environ.get('CLAUDE_MODEL', 'sonnet')}), edits auto-approved"
+                        engine = f"claude CLI ({os.environ.get('CLAUDE_MODEL', 'sonnet')})"
                     elif backend == "codex":
                         engine = "codex CLI, workspace-write sandbox"
                     elif backend == "local" or not os.environ.get("OPENROUTER_API_KEY"):
                         engine = "local llama-server + file tools"
                     else:
                         engine = f"{os.environ.get('OPENROUTER_MODEL', 'openrouter/free')} + file tools"
+                    guard = "auto-approve, no prompts" if arg == "auto" else "every write/shell command asks you y/n first"
                     print(f"\033[1;32m[sys] Edit mode ON — {engine}\033[0m")
-                    print(f"\033[2m[sys] writes are confined to {workspace_path.replace(home_dir, '~', 1)} · shell commands ask first · /edit off to leave\033[0m\n")
+                    print(f"\033[2m[sys] {guard} · confined to {workspace_path.replace(home_dir, '~', 1)} · /edit off to leave\033[0m\n")
                 else:
                     os.environ.pop("AI_EDIT_MODE", None)
+                    os.environ.pop("AI_EDIT_CONFIRM", None)
                     print("\033[1;33m[sys] Edit mode OFF — back to read-only chat.\033[0m\n")
                 continue
 
@@ -588,13 +592,13 @@ def run_interactive_chat(args: list):
                 continue
 
             if query in ("/skill", "/s") or query.startswith(("/skill ", "/s ")):
-                res = subprocess.run([sys.executable, f"{CFG_DIR}/modules/ai-agent-skills", safe_name, query], input=json.loads(res.stdout.strip()) if res.stdout.strip() else json.dumps(chat_history), stdout=subprocess.PIPE, text=True)
+                res = subprocess.run([sys.executable, f"{CFG_DIR}/modules/ai-agent-skills", safe_name, query], input=json.dumps(chat_history), stdout=subprocess.PIPE, text=True)
                 if res.stdout.strip():
                     try:
                         chat_history = json.loads(res.stdout.strip())
-                        print(f"\033[1;32m[session-mgr] Restored session ({len(chat_history)-1} turns loaded).\033[0m\n")
+                        print(f"\033[1;32m[skill] Skill loaded into the session ({len(chat_history)-1} messages).\033[0m\n")
                     except Exception as e:
-                        print(f"Error loading session: {e}")
+                        print(f"Error loading skill: {e}")
                 continue
             if query.startswith(("/save", "-save")):
                 subprocess.run([sys.executable, f"{CFG_DIR}/modules/ai-agent-sessions", "save", safe_name, (query.split(None, 1)[1].strip() if " " in query else "")], input=json.dumps(chat_history), text=True)

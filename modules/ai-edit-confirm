@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+# DotAI PreToolUse permission gate for Claude Code edit mode ("ask").
+# Claude Code runs this hook before Edit/Write/Bash; it asks y/n on the
+# terminal and answers with an allow/deny permission decision.
+import json
+import sys
+
+
+def respond(decision: str, reason: str) -> None:
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": decision,
+        "permissionDecisionReason": reason,
+    }}))
+    sys.exit(0)
+
+
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    respond("deny", "malformed hook input")
+
+tool = data.get("tool_name") or "?"
+inp = data.get("tool_input") or {}
+target = inp.get("file_path") or inp.get("command") or inp.get("notebook_path") or ""
+extra = f" ({len(inp.get('content') or '')} chars)" if tool == "Write" else ""
+
+try:
+    tty_in = open("/dev/tty", "r")
+    tty_out = open("/dev/tty", "w")
+except Exception:
+    respond("deny", "no terminal available to ask the user for permission")
+
+try:
+    tty_out.write(f"\r\x1b[2K\033[1;33m[permission] {tool}: {str(target)[:120]}{extra} — allow? [Y/n] \033[0m")
+    tty_out.flush()
+    ans = tty_in.readline().strip().lower()
+except KeyboardInterrupt:
+    respond("deny", "user interrupted the permission prompt")
+except Exception:
+    respond("deny", "could not read the user's answer")
+
+if ans in ("", "y", "yes"):
+    respond("allow", "user approved")
+respond("deny", "user denied this action — continue without it or ask what to do instead")

@@ -183,9 +183,54 @@ EDIT_SYSTEM_ADD = (
     "After editing, reply briefly: what you changed, where, and why."
 )
 
+TOOLS_SYSTEM_ADD = (
+    "\n\n### TOOLS (these are real, not hypothetical):\n"
+    "You have working tools: {names}. The project root is {ws} — all paths are "
+    "relative to it, and run_command already executes there, so never cd "
+    "elsewhere or invent paths. Shell commands are shown to the user for y/n "
+    "approval and their real output comes back to you as the tool result. "
+    "Use the tools and report their actual output; never claim you cannot "
+    "access files or run commands."
+)
+
+READ_SYSTEM_ADD = (
+    "\n\n### FILE ACCESS:\n"
+    "You have read-only file access via the Read, Glob, and Grep tools. "
+    "When asked about a project, directory, or file, read it directly with your "
+    "tools instead of asking the user to paste code or provide paths. "
+    "You can also run shell commands (builds, linters, `flutter analyze`, tests) "
+    "with the Bash tool — each command is shown to the user for y/n approval "
+    "first, so run what the task needs instead of asking the user to run it."
+)
+
 
 def edit_mode_on() -> bool:
     return os.environ.get("AI_EDIT_MODE") == "1"
+
+
+def edit_confirm_on() -> bool:
+    """Ask y/n before writes and shell commands in edit mode (the default);
+    /edit auto turns the prompts off."""
+    return os.environ.get("AI_EDIT_CONFIRM", "1") == "1"
+
+
+class _NoSpinner:
+    """Stands in for InlineSpinner when permission prompts may appear —
+    a ticking spinner would overwrite the y/n question on the same row."""
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+
+def claude_confirm_settings() -> str:
+    """--settings JSON wiring the PreToolUse y/n gate into Claude Code."""
+    hook_cmd = f"python3 {os.path.expanduser('~/.config/local-ai')}/modules/ai-edit-confirm"
+    return json.dumps({"hooks": {"PreToolUse": [{
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "hooks": [{"type": "command", "command": hook_cmd, "timeout": 600}],
+    }]}})
 
 
 def stream_claude(messages, prefix, spinner, show_stats: bool = True):
@@ -221,15 +266,26 @@ def stream_claude(messages, prefix, spinner, show_stats: bool = True):
         claude_bin, "-p",
         "--model", os.environ.get("CLAUDE_MODEL", "sonnet"),
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+        # Personal MCP connectors (Figma, Gmail, …) would bloat every prompt
+        # by tens of thousands of tokens — run with none
+        "--strict-mcp-config",
     ]
     if edit:
-        # Full agent in the focused project: edits auto-approved, shell allowed
+        # Full agent in the focused project; in "ask" mode a PreToolUse hook
+        # gets a y/n from the user before every Edit/Write/Bash
         cmd += ["--permission-mode", "acceptEdits",
                 "--allowedTools", "Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash,TodoWrite"]
+        if edit_confirm_on():
+            cmd += ["--settings", claude_confirm_settings()]
+            spinner = _NoSpinner()
         system_prompt = (system_prompt or "") + EDIT_SYSTEM_ADD.format(ws=workspace)
     else:
-        # Chat only: block agentic tools so it can't read files or run commands
-        cmd += ["--disallowed-tools", "Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit"]
+        # Chat: reads allowed everywhere, shell behind the y/n permission
+        # hook, writes stay blocked entirely
+        cmd += ["--allowedTools", "Read,Glob,Grep,Bash",
+                "--disallowed-tools", "Edit,Write,MultiEdit,NotebookEdit,Task,WebFetch,WebSearch,TodoWrite",
+                "--settings", claude_confirm_settings()]
+        system_prompt = (system_prompt or "") + READ_SYSTEM_ADD
     if system_prompt:
         cmd += ["--system-prompt", system_prompt]
 
@@ -241,7 +297,7 @@ def stream_claude(messages, prefix, spinner, show_stats: bool = True):
     try:
         spinner.start()
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                text=True, cwd=workspace if edit else None)
+                                text=True, cwd=workspace)
         proc.stdin.write(prompt)
         proc.stdin.close()
         result_text = None
@@ -269,21 +325,22 @@ def stream_claude(messages, prefix, spinner, show_stats: bool = True):
                     acc.append(content)
                     if speed_test and show_stats:
                         speed_test.count_token(content)
-            elif data.get("type") == "assistant" and edit:
-                # Surface tool calls (Edit/Write/Bash…) as dim ∗ activity lines
+            elif data.get("type") == "assistant":
+                # Surface tool calls (Read/Edit/Write/Bash…) as dim ∗ activity lines
                 for blk in (data.get("message") or {}).get("content") or []:
                     if isinstance(blk, dict) and blk.get("type") == "tool_use":
                         inp = blk.get("input") or {}
                         brief = str(inp.get("file_path") or inp.get("command") or inp.get("pattern") or inp.get("path") or "")[:100]
+                        # Spinner stays off after a tool call — a permission
+                        # prompt may follow and needs the row to itself
                         spinner.stop()
                         print(f"\033[2m∗ {blk.get('name')} {brief}\033[0m")
-                        spinner.start()
-                        first = True  # next text delta re-clears the spinner row
+                        first = True  # next text delta re-clears the row
             elif data.get("type") == "result":
                 result_text = data.get("result")
                 result_usage = data.get("usage") or {}
                 result_cost = data.get("total_cost_usd") or 0.0
-        proc.wait(timeout=600 if edit else 30)
+        proc.wait(timeout=600 if edit else 300)
         spinner.stop()
         if not acc and result_text:
             if sys.stdout.isatty():
@@ -450,6 +507,10 @@ def _run_edit_tool(name: str, args: dict, workspace: str) -> str:
     if name == "write_file":
         full = _safe_path(workspace, args.get("path", ""))
         content = args.get("content", "")
+        if edit_confirm_on():
+            verb = "overwrite" if os.path.exists(full) else "create"
+            if not sys.stdout.isatty() or not ui.confirm_tool(f"{verb} {args.get('path')} ({len(content)} chars)"):
+                return "[denied] the user did not approve this write — continue without it or ask what to do instead"
         os.makedirs(os.path.dirname(full) or workspace, exist_ok=True)
         with open(full, "w", encoding="utf-8") as f:
             f.write(content)
@@ -460,11 +521,21 @@ def _run_edit_tool(name: str, args: dict, workspace: str) -> str:
         return "\n".join((e + "/" if os.path.isdir(os.path.join(full, e)) else e) for e in entries) or "(empty)"
     if name == "run_command":
         cmd = args.get("command", "")
-        if not sys.stdout.isatty() or not ui.confirm_tool(f"$ {cmd}"):
-            return "[denied] the user did not approve this command"
-        res = subprocess.run(cmd, shell=True, cwd=workspace, capture_output=True, text=True, timeout=120)
-        out = (res.stdout or "") + (("\n" + res.stderr) if res.stderr else "")
-        return out[:10000] or f"(exit {res.returncode}, no output)"
+        if not sys.stdout.isatty():
+            return "[denied] no terminal available to approve shell commands"
+        if edit_confirm_on() and not ui.confirm_tool(f"$ {cmd}"):
+            return "[denied] the user did not approve this command — continue without it or ask what to do instead"
+        # Login shell so the user's PATH additions (flutter, node, …) resolve
+        shell = os.environ.get("SHELL") or "/bin/sh"
+        try:
+            res = subprocess.run([shell, "-lc", cmd], cwd=workspace,
+                                 capture_output=True, text=True, timeout=300)
+        except subprocess.TimeoutExpired:
+            return "[error] command timed out after 300 seconds"
+        out = ((res.stdout or "") + (("\n" + res.stderr) if res.stderr else "")).strip()[:10000]
+        if res.returncode != 0:
+            return f"(exit {res.returncode})\n{out}" if out else f"(exit {res.returncode}, no output)"
+        return out or "(exit 0, no output)"
     return f"[error] unknown tool {name}"
 
 
@@ -487,6 +558,8 @@ def edit_turn_tools(messages, prefix, spinner, show_stats: bool = True) -> str o
     convo = [dict(m) for m in messages]
     if convo and convo[0]["role"] == "system":
         convo[0]["content"] += EDIT_SYSTEM_ADD.format(ws=workspace)
+        convo[0]["content"] += TOOLS_SYSTEM_ADD.format(
+            names="read_file, write_file, list_dir, run_command", ws=workspace)
 
     total = {"prompt_tokens": 0, "completion_tokens": 0, "cost": 0.0}
     resolved_model = None

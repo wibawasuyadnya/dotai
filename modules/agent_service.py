@@ -18,7 +18,8 @@ import urllib.error as urlerr
 CFG_DIR = os.path.join(os.path.expanduser("~"), ".config", "local-ai")
 sys.path.insert(0, os.path.join(CFG_DIR, "modules"))
 
-from agent_core import extract_stream_content  # noqa: E402
+from agent_core import (extract_stream_content, edit_mode_on, edit_confirm_on,
+                        claude_confirm_settings, EDIT_SYSTEM_ADD, READ_SYSTEM_ADD)  # noqa: E402
 from agent_skills import find_skill_file  # noqa: E402
 
 SESSIONS_DIR = os.path.join(CFG_DIR, ".sessions")
@@ -197,17 +198,32 @@ def _stream_claude_cli(messages: list, model: str):
     if not claude_bin:
         raise RuntimeError("claude CLI not installed")
     system_prompt, convo = _split_system(messages)
+    edit = edit_mode_on()
+    workspace = os.environ.get("AI_WORKSPACE_PATH", os.getcwd())
     cmd = [
         claude_bin, "-p",
         "--model", model or "sonnet",
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-        # Chat only: block agentic tools so it can't read files or run commands
-        "--disallowed-tools", "Bash,Read,Edit,Write,Glob,Grep,WebFetch,WebSearch,Task,TodoWrite,NotebookEdit",
+        # No personal MCP connectors — they bloat every prompt with tool schemas
+        "--strict-mcp-config",
     ]
+    if edit:
+        cmd += ["--permission-mode", "acceptEdits",
+                "--allowedTools", "Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,Bash,TodoWrite"]
+        if edit_confirm_on():
+            # PreToolUse hook asks y/n on the terminal before Edit/Write/Bash
+            cmd += ["--settings", claude_confirm_settings()]
+        system_prompt = (system_prompt or "") + EDIT_SYSTEM_ADD.format(ws=workspace)
+    else:
+        # Reads allowed everywhere, shell behind the y/n hook, writes blocked
+        cmd += ["--allowedTools", "Read,Glob,Grep,Bash",
+                "--disallowed-tools", "Edit,Write,MultiEdit,NotebookEdit,Task,WebFetch,WebSearch,TodoWrite",
+                "--settings", claude_confirm_settings()]
+        system_prompt = (system_prompt or "") + READ_SYSTEM_ADD
     if system_prompt:
         cmd += ["--system-prompt", system_prompt]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                            stderr=subprocess.DEVNULL, text=True)
+                            stderr=subprocess.DEVNULL, text=True, cwd=workspace)
     try:
         proc.stdin.write(_cli_prompt(convo))
         proc.stdin.close()
@@ -225,9 +241,16 @@ def _stream_claude_cli(messages: list, model: str):
                 if delta.get("type") == "text_delta" and delta.get("text"):
                     got = True
                     yield delta["text"]
+            elif data.get("type") == "assistant":
+                # Tool calls (Read/Grep/Edit…) surface as ∗ activity lines
+                for blk in (data.get("message") or {}).get("content") or []:
+                    if isinstance(blk, dict) and blk.get("type") == "tool_use":
+                        inp = blk.get("input") or {}
+                        brief = str(inp.get("file_path") or inp.get("command") or inp.get("pattern") or inp.get("path") or "")[:100]
+                        yield f"\n∗ {blk.get('name')} {brief}\n"
             elif data.get("type") == "result":
                 result_text = data.get("result")
-        proc.wait(timeout=30)
+        proc.wait(timeout=600 if edit else 300)
         if not got and result_text:
             yield result_text
     finally:
@@ -309,22 +332,33 @@ def stream_chat(session: dict, user_text: str):
             yield {"type": "error", "message": "; ".join(errs) or f"{backend} CLI returned nothing"}
             return
 
-    # Optional "mcp": ["server", ...] — tool-calling loop (OpenRouter backend).
-    # Non-streaming rounds: model may call MCP tools, results go back, repeat
-    # until it answers in plain text. Tool activity is surfaced as ∗ lines.
+    # Tool-calling loop (OpenRouter backend): built-in file/shell tools are
+    # always attached (reads free, run_command needs the user's y/n on a
+    # terminal, write_file only in edit mode), plus any MCP servers on the
+    # agent. Non-streaming rounds: the model calls tools, results go back,
+    # repeat until it answers in plain text. Activity is surfaced as ∗ lines.
     mcp_servers = agent.get("mcp") or []
-    if not acc and mcp_servers and backend == "openrouter":
-        okey = os.environ.get("OPENROUTER_API_KEY")
-        try:
-            import mcp_client
-            tools = mcp_client.openai_tools(mcp_servers)
-        except Exception as e:
-            yield {"type": "error", "message": f"MCP: {e}"}
-            return
-        if not okey:
-            yield {"type": "error", "message": "MCP agents need OPENROUTER_API_KEY"}
-            return
+    okey = os.environ.get("OPENROUTER_API_KEY")
+    if not acc and backend == "openrouter" and okey:
+        from agent_core import _EDIT_TOOLS, _run_edit_tool
+        allowed = {"read_file", "list_dir", "run_command"} | ({"write_file"} if edit_mode_on() else set())
+        builtin = {t["function"]["name"] for t in _EDIT_TOOLS if t["function"]["name"] in allowed}
+        tools = [t for t in _EDIT_TOOLS if t["function"]["name"] in builtin]
+        if mcp_servers:
+            try:
+                import mcp_client
+                tools += mcp_client.openai_tools(mcp_servers)
+            except Exception as e:
+                yield {"type": "error", "message": f"MCP: {e}"}
+                return
+        workspace = os.environ.get("AI_WORKSPACE_PATH", os.getcwd())
         convo = list(messages)
+        from agent_core import TOOLS_SYSTEM_ADD
+        note = TOOLS_SYSTEM_ADD.format(names=", ".join(sorted(builtin)), ws=workspace)
+        if convo and convo[0]["role"] == "system":
+            convo[0] = {"role": "system", "content": convo[0]["content"] + note}
+        else:
+            convo.insert(0, {"role": "system", "content": note.strip()})
         model = session.get("model") or agent["model"]
         for _round in range(6):
             body = {"model": model, "messages": convo, "tools": tools,
@@ -364,22 +398,33 @@ def stream_chat(session: dict, user_text: str):
             convo.append(msg)
             for tc in calls:
                 fname = tc.get("function", {}).get("name", "")
-                srv, _, tool = fname.partition("__")
                 try:
                     args = json.loads(tc.get("function", {}).get("arguments") or "{}")
                 except Exception:
                     args = {}
-                yield {"type": "token",
-                       "text": f"\n∗ {srv}.{tool} {json.dumps(args, ensure_ascii=False)[:140]}\n"}
-                try:
-                    result = mcp_client.call_tool(srv, tool, args)
-                except Exception as e:
-                    result = f"[tool error] {e}"
+                if fname in builtin:
+                    brief = str(args.get("path") or args.get("command") or "")[:120]
+                    yield {"type": "token", "text": f"\n∗ {fname} {brief}\n"}
+                    try:
+                        result = _run_edit_tool(fname, args, workspace)
+                    except Exception as e:
+                        result = f"[tool error] {e}"
+                else:
+                    srv, _, tool = fname.partition("__")
+                    yield {"type": "token",
+                           "text": f"\n∗ {srv}.{tool} {json.dumps(args, ensure_ascii=False)[:140]}\n"}
+                    try:
+                        result = mcp_client.call_tool(srv, tool, args)
+                    except Exception as e:
+                        result = f"[tool error] {e}"
                 convo.append({"role": "tool", "tool_call_id": tc.get("id", ""),
                               "content": result[:20000]})
         if not acc:
-            yield {"type": "error", "message": "; ".join(errs) or "MCP agent returned nothing"}
-            return
+            if mcp_servers:
+                yield {"type": "error", "message": "; ".join(errs) or "MCP agent returned nothing"}
+                return
+            # No MCP attached: let the plain streaming cascade below retry
+            errs.append("tool loop returned nothing")
 
     for url, headers, model, timeout in ([] if acc else _backends(session.get("model") or agent["model"])):
         body = {"model": model, "messages": messages, "stream": True,
