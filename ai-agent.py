@@ -36,7 +36,11 @@ def load_env_file(path: str) -> None:
                 key = key.strip()
                 if key.startswith("export "):
                     key = key[len("export "):].strip()
-                val = val.strip().strip('"').strip("'")
+                val = val.strip()
+                # Unquoted values may carry an inline comment (KEY=x  # note)
+                if not val.startswith(('"', "'")):
+                    val = re.split(r"\s+#", val, 1)[0].strip()
+                val = val.strip('"').strip("'")
                 if key and key not in os.environ:
                     os.environ[key] = val
     except Exception:

@@ -7,6 +7,7 @@ render them. Backends: OpenRouter (primary) with local llama.cpp fallback.
 Sessions are persisted as JSON files under <repo>/.sessions/<agent-id>/.
 """
 import os
+import re
 import sys
 import json
 import time
@@ -40,7 +41,11 @@ def load_env() -> None:
                 key = key.strip()
                 if key.startswith("export "):
                     key = key[len("export "):].strip()
-                val = val.strip().strip('"').strip("'")
+                val = val.strip()
+                # Unquoted values may carry an inline comment (KEY=x  # note)
+                if not val.startswith(('"', "'")):
+                    val = re.split(r"\s+#", val, 1)[0].strip()
+                val = val.strip('"').strip("'")
                 if key and key not in os.environ:
                     os.environ[key] = val
     except Exception:

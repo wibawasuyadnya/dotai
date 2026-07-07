@@ -58,7 +58,7 @@ Other ways:
 npm install -g wibawasuyadnya/dotai
 
 # Homebrew
-brew tap wibawasuyadnya/dotai && brew install --HEAD dotai
+brew install wibawasuyadnya/dotai/dotai
 
 # Manual
 git clone https://github.com/wibawasuyadnya/dotai.git ~/.config/local-ai
