@@ -164,7 +164,7 @@ def _backends(model: str) -> list:
         out.append((
             "https://openrouter.ai/api/v1/chat/completions",
             {"Authorization": f"Bearer {okey}",
-             "HTTP-Referer": "https://github.com/suyadnya/local-ai"},
+             "HTTP-Referer": "https://github.com/wibawasuyadnya/dotai"},
             model,
             180,
         ))
@@ -375,7 +375,7 @@ def stream_chat(session: dict, user_text: str):
                 data=json.dumps(body).encode("utf-8"),
                 headers={"Content-Type": "application/json",
                          "Authorization": f"Bearer {okey}",
-                         "HTTP-Referer": "https://github.com/suyadnya/local-ai"},
+                         "HTTP-Referer": "https://github.com/wibawasuyadnya/dotai"},
                 method="POST")
             try:
                 with urlreq.urlopen(req, timeout=180) as r:

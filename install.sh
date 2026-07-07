@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # DotAI installer — terminal multi-agent AI
 #
-#   curl -fsSL https://raw.githubusercontent.com/wibawasuyadnya/local-ai-main/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/wibawasuyadnya/dotai/main/install.sh | bash
 #
 # What it does (idempotent — safe to re-run to update):
 #   1. Puts the app in ~/.config/local-ai (git clone, or copies from a local
@@ -13,7 +13,7 @@
 #      which provides the `ai` command (and aic/aix/aio/ail/ais shortcuts)
 set -euo pipefail
 
-REPO="wibawasuyadnya/local-ai-main"
+REPO="wibawasuyadnya/dotai"
 DIR="$HOME/.config/local-ai"
 SRC=""
 [ "${1:-}" = "--local" ] && SRC="${2:?usage: install.sh --local <srcdir>}"

@@ -23,9 +23,9 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wibawasuyadnya/local-ai-main.git"
+    "url": "git+https://github.com/wibawasuyadnya/dotai.git"
   },
-  "homepage": "https://wibawasuyadnya.github.io/local-ai-main",
+  "homepage": "https://wibawasuyadnya.github.io/dotai",
   "license": "MIT",
   "os": [
     "darwin",

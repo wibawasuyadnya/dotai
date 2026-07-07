@@ -8,8 +8,8 @@
 #
 class Dotai < Formula
   desc "Local multi-agent AI for your terminal — Claude, Codex, OpenRouter, llama.cpp"
-  homepage "https://wibawasuyadnya.github.io/local-ai-main"
-  head "https://github.com/wibawasuyadnya/local-ai-main.git", branch: "main"
+  homepage "https://wibawasuyadnya.github.io/dotai"
+  head "https://github.com/wibawasuyadnya/dotai.git", branch: "main"
   license "MIT"
 
   depends_on "python@3.12"

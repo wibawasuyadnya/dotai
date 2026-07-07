@@ -617,7 +617,7 @@ def edit_turn_tools(messages, prefix, spinner, show_stats: bool = True) -> str o
     backend = os.environ.get("AI_BACKEND", "").strip().lower()
     if okey and backend != "local":
         url = "https://openrouter.ai/api/v1/chat/completions"
-        headers = {"Authorization": f"Bearer {okey}", "HTTP-Referer": "https://github.com/suyadnya/local-ai"}
+        headers = {"Authorization": f"Bearer {okey}", "HTTP-Referer": "https://github.com/wibawasuyadnya/dotai"}
         model = os.environ.get("OPENROUTER_MODEL", "openrouter/free")
     else:
         if not ensure_local_server():
@@ -839,7 +839,7 @@ def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", sho
                 "https://openrouter.ai/api/v1/chat/completions",
                 {
                     "Authorization": f"Bearer {okey}",
-                    "HTTP-Referer": "https://github.com/suyadnya/local-ai"
+                    "HTTP-Referer": "https://github.com/wibawasuyadnya/dotai"
                 },
                 os.environ.get("OPENROUTER_MODEL", "openrouter/free"),
                 {"usage": {"include": True}},

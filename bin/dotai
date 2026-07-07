@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DotAI launcher for npm-global installs (`npm install -g wibawasuyadnya/local-ai-main`).
+# DotAI launcher for npm-global installs (`npm install -g wibawasuyadnya/dotai`).
 # First run bootstraps ~/.config/local-ai from the npm package copy via
 # install.sh, then every run just launches the agent.
 #

@@ -48,20 +48,20 @@
 One line (installs to `~/.config/local-ai`, hooks your shell, creates your own `.env`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wibawasuyadnya/local-ai-main/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/wibawasuyadnya/dotai/main/install.sh | bash
 ```
 
 Other ways:
 
 ```bash
 # npm (global) — installs a `dotai` command that bootstraps on first run
-npm install -g wibawasuyadnya/local-ai-main
+npm install -g wibawasuyadnya/dotai
 
 # Homebrew
 brew tap wibawasuyadnya/dotai && brew install --HEAD dotai
 
 # Manual
-git clone https://github.com/wibawasuyadnya/local-ai-main.git ~/.config/local-ai
+git clone https://github.com/wibawasuyadnya/dotai.git ~/.config/local-ai
 echo 'source "$HOME/.config/local-ai/ai-hook.sh"' >> ~/.zshrc   # or ~/.bashrc
 cp ~/.config/local-ai/.env.example ~/.config/local-ai/.env
 ```
@@ -71,7 +71,7 @@ Then open a new terminal and type `ai`. Every install keeps its **own**
 the repo. Update any time with `curl … | bash` again (or `git pull`).
 
 **Desktop app:** grab the `.dmg` from the
-[releases page](https://github.com/wibawasuyadnya/local-ai-main/releases/latest)
+[releases page](https://github.com/wibawasuyadnya/dotai/releases/latest)
 — drag DotAI to Applications. It talks to the same local server, so install
 the terminal version first. The app is unsigned: first launch is
 right-click → Open.
