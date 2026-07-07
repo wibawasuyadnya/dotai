@@ -227,7 +227,7 @@ def _stream_claude_cli(messages: list, model: str):
     try:
         proc.stdin.write(_cli_prompt(convo))
         proc.stdin.close()
-        got, result_text = False, None
+        got, result_text, result_is_error = False, None, False
         for line in proc.stdout:
             line = line.strip()
             if not line:
@@ -250,8 +250,13 @@ def _stream_claude_cli(messages: list, model: str):
                         yield f"\n∗ {blk.get('name')} {brief}\n"
             elif data.get("type") == "result":
                 result_text = data.get("result")
+                result_is_error = bool(data.get("is_error"))
         proc.wait(timeout=600 if edit else 300)
         if not got and result_text:
+            # Offline/API failures come back as a result whose text is the
+            # error — raise so the caller cascades to the next backend
+            if result_is_error or str(result_text).startswith("API Error"):
+                raise RuntimeError(str(result_text)[:120])
             yield result_text
     finally:
         if proc.poll() is None:
@@ -329,8 +334,10 @@ def stream_chat(session: dict, user_text: str):
             usage = {"prompt_tokens": sum(len(m["content"]) for m in messages) // 4,
                      "completion_tokens": len("".join(acc)) // 4}
         else:
-            yield {"type": "error", "message": "; ".join(errs) or f"{backend} CLI returned nothing"}
-            return
+            # CLI down (offline, not logged in, …): cascade to the fallback
+            # backends below — the last of which boots the local llama-server
+            if not errs:
+                errs.append(f"{backend} CLI returned nothing")
 
     # Tool-calling loop (OpenRouter backend): built-in file/shell tools are
     # always attached (reads free, run_command needs the user's y/n on a
@@ -427,6 +434,15 @@ def stream_chat(session: dict, user_text: str):
             errs.append("tool loop returned nothing")
 
     for url, headers, model, timeout in ([] if acc else _backends(session.get("model") or agent["model"])):
+        if url.startswith("http://localhost"):
+            # Local fallback (cloud down / offline): boot llama-server on demand
+            try:
+                from agent_core import ensure_local_server
+                if not ensure_local_server():
+                    errs.append("local llama-server unavailable")
+                    continue
+            except Exception:
+                pass
         body = {"model": model, "messages": messages, "stream": True,
                 "usage": {"include": True}}
         req = urlreq.Request(
@@ -492,4 +508,13 @@ def stream_chat(session: dict, user_text: str):
            "cost": usage.get("cost", 0)}
 
 
+# Persisted /settings state (startup agent, edit mode) applies to team agents
+# too — real shell env vars still win, exactly like in ai-agent.py
+_REAL_ENV_BACKEND = "AI_BACKEND" in os.environ
+_REAL_ENV_EDIT = "AI_EDIT_MODE" in os.environ
 load_env()
+try:
+    import agent_settings
+    agent_settings.apply_startup(_REAL_ENV_BACKEND, _REAL_ENV_EDIT)
+except Exception:
+    pass

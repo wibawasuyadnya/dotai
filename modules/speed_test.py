@@ -38,8 +38,9 @@ def end() -> None:
     tps = _token_count / elapsed
     
     # Opencode-style dim status line below the answer: ▪ model · tokens · speed
+    # (full words, no abbreviations — the user reads these lines literally)
     tag = f"{_label} · " if _label else ""
-    sys.stdout.write(f"\033[2m▪ {tag}{_token_count} tok · {elapsed:.1f}s · {tps:.1f} t/s\033[0m\n")
+    sys.stdout.write(f"\033[2m▪ {tag}{_token_count} tokens · {elapsed:.1f} seconds · {tps:.1f} tokens/sec\033[0m\n")
     sys.stdout.flush()
     
     # Clean up state

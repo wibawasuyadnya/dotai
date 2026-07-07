@@ -43,6 +43,11 @@ def load_env_file(path: str) -> None:
         pass
 
 
+# A backend or edit mode forced on the real shell env (`AI_BACKEND=local ai`)
+# outranks both settings.json and .env — remember what was set before .env loads
+_REAL_ENV_BACKEND = "AI_BACKEND" in os.environ
+_REAL_ENV_EDIT = "AI_EDIT_MODE" in os.environ
+
 load_env_file(os.path.join(CFG_DIR, ".env"))
 
 # Bootstrap custom local modules path
@@ -62,9 +67,13 @@ try:
     import agent_spell as spell
     import agent_skills as skills
     import agent_context as context
+    import agent_settings as settings
 except ImportError as e:
     sys.stderr.write(f"\033[1;31m[CRITICAL]: Failed to load modules: {e}\033[0m\n")
     sys.exit(1)
+
+# Persisted startup agent + edit mode from settings.json (real shell env wins)
+settings.apply_startup(_REAL_ENV_BACKEND, _REAL_ENV_EDIT)
 
 STOP_WORDS = {"is", "what", "it", "do", "any", "i", "have", "the", "a", "an", "on", "to", "for", "me", "you", "my", "your", "we", "us", "are", "about", "in", "how"}
 
@@ -207,13 +216,14 @@ HELP_TEXT = """\033[1mcommands\033[0m
   \033[1;36m/save\033[0m <name>         \033[2msave this conversation\033[0m
   \033[1;36m/load\033[0m /timeline      \033[2mbrowse and restore a saved session\033[0m
   \033[1;36m/agent\033[0m <name>        \033[2mbackend: claude | codex | openrouter | local | auto\033[0m
+  \033[1;36m/settings\033[0m [k v]      \033[2mpersistent config: startup agent, spellchecker (settings.json)\033[0m
   \033[1;36m/model\033[0m <name>        \033[2mset the current backend's model\033[0m
   \033[1;36m/effort\033[0m <lvl>        \033[2mcodex reasoning: minimal | low | medium | high\033[0m
   \033[1;36m/skill\033[0m <name>        \033[2mload a skill/role (alias /s)\033[0m
   \033[1;36m/skill list\033[0m          \033[2mall skills · /skill add <name> <owner/repo|url> · /skill rm <name>\033[0m
   \033[1;36m/mcp\033[0m                 \033[2mMCP servers · /mcp add <name> <url|command…> · /mcp tools <name> · /mcp rm\033[0m
   \033[1;36m/project\033[0m [name]      \033[2mlist projects · focus one (own memory/history) · new name = create\033[0m
-  \033[1;36m/edit\033[0m [on|auto|off]  \033[2magent can edit project files — on asks y/n per write, auto doesn't\033[0m
+  \033[1;36m/edit\033[0m [on|auto|off]  \033[2magents edit files & run commands anywhere (default on, y/n per action)\033[0m
   \033[1;36m/usage\033[0m               \033[2mspend per model · today's total · openrouter balance · /usage reset\033[0m
   \033[1;36m/tok\033[0m                 \033[2mtoken count of the conversation\033[0m
   \033[1;36m/stats\033[0m               \033[2mtoggle generation statistics\033[0m
@@ -252,7 +262,8 @@ def run_interactive_chat(args: list):
     pending_query = " ".join(args[1:]) if len(args) > 1 else None
     clean_name = " ".join(skills_list)
     
-    spell_active = not is_agent
+    # Spellchecker starts from the persisted setting (/d and /e save it too)
+    spell_active = bool(settings.get("spellcheck", not is_agent))
     memory_active = True
     show_stats = True  # Keeps stats enabled by default inside chat sessions
     
@@ -317,7 +328,8 @@ def run_interactive_chat(args: list):
                     continue
                 if query in ("/d", "/e"):
                     spell_active = (query == "/e")
-                    print(f"\033[1;33m[sys] Spellchecker {'enabled' if spell_active else 'disabled'}.\033[0m\n")
+                    settings.set("spellcheck", spell_active)
+                    print(f"\033[1;33m[sys] Spellchecker {'enabled' if spell_active else 'disabled'} — saved, next runs start this way.\033[0m\n")
                     continue
                 
                 # --- UNIFIED MEMORY LAYER TOGGLE (/m) ---
@@ -341,11 +353,60 @@ def run_interactive_chat(args: list):
                             os.environ.pop("AI_BACKEND", None)
                         else:
                             os.environ["AI_BACKEND"] = arg
-                        print(f"\033[1;32m[sys] Agent backend switched to: {arg}\033[0m\n")
+                        print(f"\033[1;32m[sys] Agent backend switched to: {arg}\033[0m")
+                        print(f"\033[2m[sys] this session only — /settings agent {arg} makes it the startup default\033[0m\n")
                     else:
                         cur = os.environ.get("AI_BACKEND") or "auto (cascade)"
                         print(f"\033[1;33m[sys] Current backend: {cur}\033[0m")
                         print(f"\033[2m[sys] Usage: /agent <{'|'.join(valid)}>  (local = your llama.cpp model, e.g. Hermes)\033[0m\n")
+                    continue
+
+                # --- PERSISTENT SETTINGS: /settings [key value] (settings.json) ---
+                if query.split()[0] in ("/settings", "/setting", "/set"):
+                    sp = query.split()
+                    if len(sp) == 1:
+                        cur_agent = settings.get("agent") or "auto"
+                        cur_spell = settings.get("spellcheck", not is_agent)
+                        cur_edit = settings.get("edit") or "on"
+                        print("\033[1msettings\033[0m \033[2m(persist across runs — settings.json)\033[0m")
+                        print(f"  \033[1m{'agent':<12}\033[0m {cur_agent:<14} \033[2mbackend on startup · /settings agent <claude|codex|openrouter|gemini|local|auto>\033[0m")
+                        print(f"  \033[1m{'edit':<12}\033[0m {cur_edit:<14} \033[2magents run commands & edit anywhere · on = asks y/n each action · auto | off\033[0m")
+                        print(f"  \033[1m{'spell':<12}\033[0m {'on' if cur_spell else 'off':<14} \033[2mspellchecker on startup · /settings spell <on|off> (/d and /e save too)\033[0m")
+                        print(f"\033[2m  file: {settings.SETTINGS_FILE.replace(home_dir, '~', 1)}\033[0m\n")
+                        continue
+                    key = sp[1].lower()
+                    val = sp[2].lower() if len(sp) > 2 else ""
+                    if key in ("agent", "backend"):
+                        if val in settings.VALID_AGENTS:
+                            settings.set("agent", val)
+                            if val == "auto":
+                                os.environ.pop("AI_BACKEND", None)
+                            else:
+                                os.environ["AI_BACKEND"] = val
+                            print(f"\033[1;32m[settings] startup agent saved: {val} — applied now and on every next run\033[0m\n")
+                        else:
+                            print(f"\033[1;33m[settings] usage: /settings agent <{'|'.join(settings.VALID_AGENTS)}>\033[0m\n")
+                    elif key == "edit":
+                        if val in settings.VALID_EDIT:
+                            settings.set("edit", val)
+                            if val == "off":
+                                os.environ.pop("AI_EDIT_MODE", None)
+                                os.environ.pop("AI_EDIT_CONFIRM", None)
+                            else:
+                                os.environ["AI_EDIT_MODE"] = "1"
+                                os.environ["AI_EDIT_CONFIRM"] = "0" if val == "auto" else "1"
+                            print(f"\033[1;32m[settings] edit mode saved: {val} — applied now and on every next run\033[0m\n")
+                        else:
+                            print("\033[1;33m[settings] usage: /settings edit <on|auto|off> — on asks y/n per action\033[0m\n")
+                    elif key in ("spell", "spellcheck", "autocorrect"):
+                        if val in ("on", "off"):
+                            spell_active = (val == "on")
+                            settings.set("spellcheck", spell_active)
+                            print(f"\033[1;32m[settings] spellchecker saved: {val} — applied now and on every next run\033[0m\n")
+                        else:
+                            print("\033[1;33m[settings] usage: /settings spell <on|off>\033[0m\n")
+                    else:
+                        print(f"\033[1;33m[settings] unknown key '{key}' — /settings shows what can be set\033[0m\n")
                     continue
 
                 if query.split()[0] == "/model":
@@ -421,6 +482,7 @@ def run_interactive_chat(args: list):
                         continue
                     elif action == "DISABLE":
                         spell_active = False
+                        settings.set("spellcheck", False)
                     
             # Opencode-style: re-render the typed line as a shaded user block
             # (chat + @team messages only; /commands keep the plain prompt)
@@ -498,6 +560,7 @@ def run_interactive_chat(args: list):
                 if arg in ("on", "auto") or (arg == "" and not cur):
                     os.environ["AI_EDIT_MODE"] = "1"
                     os.environ["AI_EDIT_CONFIRM"] = "0" if arg == "auto" else "1"
+                    settings.set("edit", "auto" if arg == "auto" else "on")
                     backend = os.environ.get("AI_BACKEND", "").strip().lower()
                     if backend == "claude":
                         engine = f"claude CLI ({os.environ.get('CLAUDE_MODEL', 'sonnet')})"
@@ -513,7 +576,8 @@ def run_interactive_chat(args: list):
                 else:
                     os.environ.pop("AI_EDIT_MODE", None)
                     os.environ.pop("AI_EDIT_CONFIRM", None)
-                    print("\033[1;33m[sys] Edit mode OFF — back to read-only chat.\033[0m\n")
+                    settings.set("edit", "off")
+                    print("\033[1;33m[sys] Edit mode OFF — read-only chat, saved for next runs too (/edit on restores it).\033[0m\n")
                 continue
 
             # --- SPEND LEDGER: /usage — per-model tokens & cost, today's total,
@@ -690,6 +754,9 @@ def run_interactive_chat(args: list):
         sys.exit(0)
     finally:
         ui.bottom_input_off()
+        # True zero-daemon exit: stop the auto-started llama-server too
+        # (runs on /exit, Ctrl+C, and Ctrl+D alike; AI_KEEP_LOCAL=1 skips it)
+        core.shutdown_local_server()
 
 
 def run_direct_query(args: list):

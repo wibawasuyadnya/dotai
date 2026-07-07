@@ -76,14 +76,15 @@ def _fmt_cost(c: float) -> str:
 
 def turn_line(in_tok: int, out_tok: int, cost: float, ctx_used: int = None, ctx_max: int = None) -> str:
     """Dim one-liner printed under the speed stats after each answer:
-    tokens in/out, this turn's cost, today's running spend, context left."""
+    tokens in/out, this turn's cost, today's running spend, context left.
+    Full words, no abbreviations."""
     parts = [
-        f"↓{_fmt_tok(in_tok)} ↑{_fmt_tok(out_tok)}",
-        f"turn {_fmt_cost(cost)}",
+        f"{_fmt_tok(in_tok)} tokens sent · {_fmt_tok(out_tok)} received",
+        f"turn cost {_fmt_cost(cost)}",
         f"today {_fmt_cost(today_cost())}",
     ]
     if ctx_used is not None and ctx_max:
-        parts.append(f"ctx {_fmt_tok(ctx_used)}/{_fmt_tok(ctx_max)} · {_fmt_tok(max(0, ctx_max - ctx_used))} left")
+        parts.append(f"context {_fmt_tok(ctx_used)} of {_fmt_tok(ctx_max)} used · {_fmt_tok(max(0, ctx_max - ctx_used))} left")
     return "\033[2m▪ " + " · ".join(parts) + "\033[0m"
 
 
@@ -152,10 +153,10 @@ def balance_left() -> float or None:
 
 
 def _backend_spend_bit(backend: str, m: dict) -> str:
-    """'openrouter $0.0213' for paid turns, 'local 1.2k tok' for free ones."""
+    """'openrouter $0.0213' for paid turns, 'local 1.2k tokens' for free ones."""
     if m.get("cost"):
         return f"{backend} {_fmt_cost(m['cost'])}"
-    return f"{backend} {_fmt_tok(m.get('out', 0))} tok"
+    return f"{backend} {_fmt_tok(m.get('out', 0))} tokens"
 
 
 def statusline_spend() -> str:
@@ -166,7 +167,7 @@ def statusline_spend() -> str:
             for b in ("openrouter", "claude", "codex", "gemini", "local") if b in per]
     left = balance_left()
     if left is not None:
-        bits.append(f"bal ${left:.2f}")
+        bits.append(f"balance ${left:.2f}")
     return " · ".join(bits)
 
 
@@ -176,7 +177,7 @@ def header_spend() -> str or None:
     m = today_by_backend().get(b)
     if not m:
         return None
-    spend = f"today {_fmt_cost(m['cost'])}" if m.get("cost") else f"today {_fmt_tok(m.get('out', 0))} tok"
+    spend = f"today {_fmt_cost(m['cost'])}" if m.get("cost") else f"today {_fmt_tok(m.get('out', 0))} tokens"
     left = balance_left()
     if b == "openrouter" and left is not None:
         spend += f" · ${left:.2f} left"
@@ -220,7 +221,7 @@ def print_summary() -> None:
     t_in = sum(m.get("in", 0) for m in today.values())
     t_out = sum(m.get("out", 0) for m in today.values())
     t_cost = sum(m.get("cost", 0.0) for m in today.values())
-    print(f"  \033[2mtoday: {t_req} req · ↓{_fmt_tok(t_in)} ↑{_fmt_tok(t_out)} · {_fmt_cost(t_cost)}\033[0m")
+    print(f"  \033[2mtoday: {t_req} requests · {_fmt_tok(t_in)} tokens sent · {_fmt_tok(t_out)} received · {_fmt_cost(t_cost)}\033[0m")
     per = today_by_backend()
     if per:
         bits = [_backend_spend_bit(b, per[b])

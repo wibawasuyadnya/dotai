@@ -16,10 +16,13 @@ except ImportError:
     pass
 
 class InlineSpinner:
-    """A lightweight, thread-safe on-demand ANSI terminal spinner for CLI operations."""
+    """A lightweight, thread-safe on-demand ANSI terminal spinner for CLI operations.
+    Carries a live activity label (thinking / checking / updating / running…)
+    so the user sees what the agent is doing, not just that it is busy."""
     def __init__(self, chars: str = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"):
         self.chars: str = chars
         self.active: bool = False
+        self.label: str = "thinking"
         self.thread: Optional[threading.Thread] = None
 
     def _spin(self) -> None:
@@ -28,7 +31,7 @@ class InlineSpinner:
         while self.active:
             try:
                 char = self.chars[idx % char_len]
-                sys.stderr.write(f"\r\033[1;32m{char}\033[0m ")
+                sys.stderr.write(f"\r\x1b[2K\033[1;32m{char}\033[0m \033[2m{self.label}…\033[0m ")
                 sys.stderr.flush()
             except Exception:
                 pass
@@ -37,7 +40,14 @@ class InlineSpinner:
         sys.stderr.write("\r\x1b[2K\r")
         sys.stderr.flush()
 
-    def start(self) -> None:
+    def set_label(self, label: str) -> None:
+        self.label = label or "thinking"
+
+    def start(self, label: str = None) -> None:
+        if label:
+            self.label = label
+        elif not self.active:
+            self.label = "thinking"
         if not self.active:
             self.active = True
             self.thread = threading.Thread(target=self._spin, daemon=True)
@@ -226,6 +236,48 @@ def echo_user_block(query: str) -> None:
     for ln in lines:
         print(f"{bar} {ln.ljust(cols - 3)}\033[0m")
     print()
+
+
+def render_diff(old: str, new: str, path: str = "", max_lines: int = 60) -> str:
+    """Colored unified diff of a file change: red - removed, green + added,
+    dim @@ hunk headers with line numbers. Used before every edit so the user
+    sees exactly which lines change. Returns '' when nothing differs."""
+    import difflib
+    old_lines = old.splitlines()
+    new_lines = new.splitlines()
+    diff = list(difflib.unified_diff(old_lines, new_lines, lineterm="", n=2))
+    if not diff:
+        return ""
+    out = []
+    if path:
+        out.append(f"\033[1m  {path}\033[0m")
+    shown = 0
+    for ln in diff:
+        if ln.startswith(("---", "+++")):
+            continue
+        if shown >= max_lines:
+            out.append(f"\033[2m  … diff truncated ({len(diff) - shown} more lines)\033[0m")
+            break
+        if ln.startswith("@@"):
+            out.append(f"\033[2m  {ln}\033[0m")
+        elif ln.startswith("+"):
+            out.append(f"\033[32m  + {ln[1:]}\033[0m")
+        elif ln.startswith("-"):
+            out.append(f"\033[31m  - {ln[1:]}\033[0m")
+        else:
+            out.append(f"\033[2m    {ln[1:]}\033[0m")
+        shown += 1
+    added = sum(1 for ln in diff if ln.startswith("+") and not ln.startswith("+++"))
+    removed = sum(1 for ln in diff if ln.startswith("-") and not ln.startswith("---"))
+    out.append(f"\033[2m  +{added} -{removed} lines\033[0m")
+    return "\n".join(out)
+
+
+def print_diff(old: str, new: str, path: str = "") -> None:
+    rendered = render_diff(old, new, path)
+    if rendered:
+        sys.stderr.write(rendered + "\n")
+        sys.stderr.flush()
 
 
 def confirm_tool(tool: str) -> bool:

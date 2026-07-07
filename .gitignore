@@ -30,3 +30,6 @@ mcp.json
 
 # GUI app stays local-only (not published to GitHub)
 gui/
+
+# Persistent /settings user config stays local
+settings.json

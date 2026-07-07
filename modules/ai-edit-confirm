@@ -3,7 +3,42 @@
 # Claude Code runs this hook before Edit/Write/Bash; it asks y/n on the
 # terminal and answers with an allow/deny permission decision.
 import json
+import os
 import sys
+
+sys.path.append(os.path.join(os.path.expanduser("~/.config/local-ai"), "modules"))
+try:
+    from agent_ui import render_diff
+except Exception:
+    render_diff = None
+
+
+def edit_diff(tool: str, inp: dict) -> str:
+    """Colored diff of what an Edit/Write/MultiEdit is about to change,
+    shown above the y/n prompt so approval is informed."""
+    if not render_diff:
+        return ""
+    try:
+        path = inp.get("file_path") or ""
+        rel = path.replace(os.path.expanduser("~"), "~", 1)
+        if tool == "Write":
+            old = ""
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    old = f.read()
+            else:
+                return f"\033[2m  {rel} — new file, {len((inp.get('content') or '').splitlines())} lines\033[0m"
+            return render_diff(old, inp.get("content") or "", rel)
+        if tool == "Edit":
+            return render_diff(inp.get("old_string") or "", inp.get("new_string") or "", rel)
+        if tool == "MultiEdit":
+            parts = [render_diff(e.get("old_string") or "", e.get("new_string") or "", "")
+                     for e in inp.get("edits") or []]
+            body = "\n".join(p for p in parts if p)
+            return f"\033[1m  {rel}\033[0m\n{body}" if body else ""
+    except Exception:
+        pass
+    return ""
 
 
 def respond(decision: str, reason: str) -> None:
@@ -32,6 +67,9 @@ except Exception:
     respond("deny", "no terminal available to ask the user for permission")
 
 try:
+    diff = edit_diff(tool, inp) if tool in ("Edit", "Write", "MultiEdit") else ""
+    if diff:
+        tty_out.write(f"\r\x1b[2K{diff}\n")
     tty_out.write(f"\r\x1b[2K\033[1;33m[permission] {tool}: {str(target)[:120]}{extra} — allow? [Y/n] \033[0m")
     tty_out.flush()
     ans = tty_in.readline().strip().lower()

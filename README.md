@@ -24,7 +24,7 @@
 - **MCP tools & skills per agent** — attach MCP servers (`/mcp add`) and prompt skills (like the bundled `caveman` token-saver) to any team agent
 - **Opencode-style terminal UI** — composer pinned to the bottom, shaded user-message blocks, per-turn model/token/cost statusline — in your plain terminal, no TUI
 - **Unlimited local agents** — every folder can become a persistent, codebase-aware agent with its own memory, history, and personality (skill)
-- **Zero idle cost** — no daemon; nothing runs until you type `ai`
+- **Zero idle cost** — no daemon; nothing runs until you type `ai`, and exiting the chat also stops the auto-started local llama-server (set `AI_KEEP_LOCAL=1` to keep it warm across sessions)
 - **Persistent memory** — per-workspace SQLite session history + long-term fact memory (TPM)
 - **Terminal-native UX** — streaming output, spellcheck, token meters, session snapshots/rollback
 

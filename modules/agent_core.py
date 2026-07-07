@@ -178,19 +178,24 @@ def stream(messages, prefix, gkey, spinner_class, show_stats: bool = True):
 
 EDIT_SYSTEM_ADD = (
     "\n\n### EDIT MODE (overrides any read-only rules above):\n"
-    "You are a coding agent with write access to the project at {ws}. "
+    "You are a coding agent with write access to the project at {ws}, and — "
+    "with the user's per-action y/n approval — to the wider system (installs, "
+    "configuration, files outside the project). "
     "Use your tools to inspect and modify files directly instead of describing changes. "
     "After editing, reply briefly: what you changed, where, and why."
 )
 
 TOOLS_SYSTEM_ADD = (
     "\n\n### TOOLS (these are real, not hypothetical):\n"
-    "You have working tools: {names}. The project root is {ws} — all paths are "
-    "relative to it, and run_command already executes there, so never cd "
-    "elsewhere or invent paths. Shell commands are shown to the user for y/n "
-    "approval and their real output comes back to you as the tool result. "
-    "Use the tools and report their actual output; never claim you cannot "
-    "access files or run commands."
+    "You have working tools: {names}. The project root is {ws} — relative "
+    "paths resolve there and run_command executes there. You also have "
+    "full-disk access under the user's control: absolute or ~ paths outside "
+    "the project and system-wide shell commands (package installs like "
+    "`npm install -g`, config changes, builds) are all allowed — each is "
+    "shown to the user for y/n approval first, and the real output comes "
+    "back to you as the tool result. Use the tools and report their actual "
+    "output; never claim you are read-only or cannot access files, install "
+    "software, or run commands."
 )
 
 READ_SYSTEM_ADD = (
@@ -217,11 +222,27 @@ def edit_confirm_on() -> bool:
 class _NoSpinner:
     """Stands in for InlineSpinner when permission prompts may appear —
     a ticking spinner would overwrite the y/n question on the same row."""
-    def start(self):
+    def start(self, label: str = None):
+        pass
+
+    def set_label(self, label: str):
         pass
 
     def stop(self):
         pass
+
+
+# Activity verbs shown next to the spinner and on ∗ tool lines, so the user
+# always knows what the agent is doing instead of a blank loading state
+TOOL_VERBS = {
+    "Read": "checking", "Glob": "checking", "Grep": "checking",
+    "read_file": "checking", "list_dir": "checking",
+    "Edit": "updating", "Write": "updating", "MultiEdit": "updating",
+    "NotebookEdit": "updating", "write_file": "updating",
+    "Bash": "running", "run_command": "running",
+    "TodoWrite": "planning", "WebFetch": "fetching", "WebSearch": "searching",
+    "Task": "delegating",
+}
 
 
 def claude_confirm_settings() -> str:
@@ -294,6 +315,7 @@ def stream_claude(messages, prefix, spinner, show_stats: bool = True):
     first = True
     result_usage = {}
     result_cost = 0.0
+    result_is_error = False
     try:
         spinner.start()
         proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -330,18 +352,30 @@ def stream_claude(messages, prefix, spinner, show_stats: bool = True):
                 for blk in (data.get("message") or {}).get("content") or []:
                     if isinstance(blk, dict) and blk.get("type") == "tool_use":
                         inp = blk.get("input") or {}
+                        name = blk.get("name") or "?"
                         brief = str(inp.get("file_path") or inp.get("command") or inp.get("pattern") or inp.get("path") or "")[:100]
-                        # Spinner stays off after a tool call — a permission
-                        # prompt may follow and needs the row to itself
                         spinner.stop()
-                        print(f"\033[2m∗ {blk.get('name')} {brief}\033[0m")
+                        verb = TOOL_VERBS.get(name, "working")
+                        print(f"\033[2m∗ {verb} · {name} {brief}\033[0m")
                         first = True  # next text delta re-clears the row
+                        # Restart the spinner with the activity verb — unless a
+                        # y/n permission prompt may follow (Bash/write tools in
+                        # ask mode), which needs the row to itself
+                        if not (edit_confirm_on() and name in ("Bash", "Edit", "Write", "MultiEdit", "NotebookEdit")):
+                            spinner.start(verb)
             elif data.get("type") == "result":
                 result_text = data.get("result")
+                result_is_error = bool(data.get("is_error"))
                 result_usage = data.get("usage") or {}
                 result_cost = data.get("total_cost_usd") or 0.0
         proc.wait(timeout=600 if edit else 300)
         spinner.stop()
+        # Offline/API failures arrive as a *successful* result whose text is
+        # the error — treat them as a backend failure so the cascade falls
+        # back (e.g. to the local llama-server) instead of printing it
+        if not acc and (result_is_error or str(result_text or "").startswith("API Error")):
+            sys.stderr.write(f"\033[90m[sys] claude CLI: {str(result_text or 'error')[:90]}\033[0m\n")
+            return None
         if not acc and result_text:
             if sys.stdout.isatty():
                 sys.stdout.write("\r\x1b[2K\r" + (f"\033[1;32m{prefix}\033[0m " if prefix else ""))
@@ -490,26 +524,53 @@ _EDIT_TOOLS = [
 
 
 def _safe_path(workspace: str, p: str) -> str:
-    """Resolves a tool path and refuses anything outside the project root."""
+    """Resolves a tool path. Relative paths land in the project root; absolute
+    and ~ paths may point anywhere on disk — the tools ask the user y/n
+    before touching anything outside the project."""
     root = os.path.realpath(workspace)
-    full = os.path.realpath(os.path.join(root, p or ""))
-    if full != root and not full.startswith(root + os.sep):
-        raise ValueError(f"path escapes the project: {p}")
-    return full
+    return os.path.realpath(os.path.join(root, os.path.expanduser(p or "")))
 
 
-def _run_edit_tool(name: str, args: dict, workspace: str) -> str:
+def _outside_project(workspace: str, full: str) -> bool:
+    root = os.path.realpath(workspace)
+    return full != root and not full.startswith(root + os.sep)
+
+
+def _run_edit_tool(name: str, args: dict, workspace: str, spinner=None) -> str:
     import subprocess
     if name == "read_file":
         full = _safe_path(workspace, args.get("path", ""))
+        # Full-disk reads are allowed, but anything outside the project always
+        # needs the user's y/n — even in /edit auto
+        if _outside_project(workspace, full):
+            if not sys.stdout.isatty() or not ui.confirm_tool(f"read {full} (outside the project)"):
+                return "[denied] the user did not approve reading outside the project"
         with open(full, "r", encoding="utf-8", errors="replace") as f:
             return f.read(60000)
     if name == "write_file":
         full = _safe_path(workspace, args.get("path", ""))
         content = args.get("content", "")
-        if edit_confirm_on():
-            verb = "overwrite" if os.path.exists(full) else "create"
-            if not sys.stdout.isatty() or not ui.confirm_tool(f"{verb} {args.get('path')} ({len(content)} chars)"):
+        outside = _outside_project(workspace, full)
+        exists = os.path.exists(full)
+        old = ""
+        if exists:
+            try:
+                with open(full, "r", encoding="utf-8", errors="replace") as f:
+                    old = f.read()
+            except Exception:
+                old = ""
+        # Always show what changes before it lands — a colored line diff for
+        # existing files, a short note for new ones
+        if sys.stdout.isatty():
+            if exists:
+                ui.print_diff(old, content, args.get("path", ""))
+            else:
+                sys.stderr.write(f"\033[2m  {args.get('path')} — new file, {len(content.splitlines())} lines\033[0m\n")
+        # Outside the project every write asks y/n, even in /edit auto
+        if edit_confirm_on() or outside:
+            verb = "overwrite" if exists else "create"
+            where = f"{full} (outside the project)" if outside else args.get("path")
+            if not sys.stdout.isatty() or not ui.confirm_tool(f"{verb} {where} ({len(content)} chars)"):
                 return "[denied] the user did not approve this write — continue without it or ask what to do instead"
         os.makedirs(os.path.dirname(full) or workspace, exist_ok=True)
         with open(full, "w", encoding="utf-8") as f:
@@ -517,6 +578,9 @@ def _run_edit_tool(name: str, args: dict, workspace: str) -> str:
         return f"wrote {len(content)} chars to {args.get('path')}"
     if name == "list_dir":
         full = _safe_path(workspace, args.get("path", ""))
+        if _outside_project(workspace, full):
+            if not sys.stdout.isatty() or not ui.confirm_tool(f"list {full} (outside the project)"):
+                return "[denied] the user did not approve listing outside the project"
         entries = sorted(os.listdir(full))
         return "\n".join((e + "/" if os.path.isdir(os.path.join(full, e)) else e) for e in entries) or "(empty)"
     if name == "run_command":
@@ -527,11 +591,16 @@ def _run_edit_tool(name: str, args: dict, workspace: str) -> str:
             return "[denied] the user did not approve this command — continue without it or ask what to do instead"
         # Login shell so the user's PATH additions (flutter, node, …) resolve
         shell = os.environ.get("SHELL") or "/bin/sh"
+        if spinner:
+            spinner.start("running")
         try:
             res = subprocess.run([shell, "-lc", cmd], cwd=workspace,
                                  capture_output=True, text=True, timeout=300)
         except subprocess.TimeoutExpired:
             return "[error] command timed out after 300 seconds"
+        finally:
+            if spinner:
+                spinner.stop()
         out = ((res.stdout or "") + (("\n" + res.stderr) if res.stderr else "")).strip()[:10000]
         if res.returncode != 0:
             return f"(exit {res.returncode})\n{out}" if out else f"(exit {res.returncode}, no output)"
@@ -602,11 +671,19 @@ def edit_turn_tools(messages, prefix, spinner, show_stats: bool = True) -> str o
                 except Exception:
                     args = {}
                 brief = str(args.get("path") or args.get("command") or "")[:100]
-                print(f"\033[2m∗ {fname} {brief}\033[0m")
+                verb = TOOL_VERBS.get(fname, "working")
+                print(f"\033[2m∗ {verb} · {fname} {brief}\033[0m")
+                # Reads spin with their verb right away; write/shell tools may
+                # show a diff and a y/n prompt first, so they manage the
+                # spinner themselves (run_command spins as "running" once approved)
+                if fname in ("read_file", "list_dir"):
+                    spinner.start(verb)
                 try:
-                    result = _run_edit_tool(fname, args, workspace)
+                    result = _run_edit_tool(fname, args, workspace, spinner)
                 except Exception as e:
                     result = f"[tool error] {e}"
+                finally:
+                    spinner.stop()
                 convo.append({"role": "tool", "tool_call_id": tc.get("id", ""), "content": result})
         return None
     except urlerr.HTTPError as e:
@@ -652,9 +729,15 @@ def ensure_local_server() -> bool:
 
     import subprocess
     log_path = os.path.join(cfg_dir, ".llama-server.log")
-    sys.stderr.write(f"\033[90m[sys] Starting local llama-server in the background (log: {log_path}). Very first run downloads ~9 GB.\033[0m\n")
+    sys.stderr.write(f"\033[90m[sys] Starting local llama-server in the background (log: {log_path}). Very first run downloads ~1 GB.\033[0m\n")
     with open(log_path, "a", encoding="utf-8") as log:
-        subprocess.Popen(["/bin/bash", script], stdout=log, stderr=log, start_new_session=True)
+        proc = subprocess.Popen(["/bin/bash", script], stdout=log, stderr=log, start_new_session=True)
+    try:
+        # Remembered so the session can stop the server again on exit
+        with open(os.path.join(cfg_dir, ".llama-server.pid"), "w", encoding="utf-8") as pf:
+            pf.write(str(proc.pid))
+    except Exception:
+        pass
 
     deadline = time.time() + 900  # model load takes ~a minute; first-time download much longer
     waited = 0
@@ -668,6 +751,43 @@ def ensure_local_server() -> bool:
             sys.stderr.write(f"\033[90m[sys] still loading model... ({waited}s)\033[0m\n")
     sys.stderr.write(f"\033[1;33m[sys] llama-server did not become ready — check {log_path}\033[0m\n")
     return False
+
+
+def shutdown_local_server() -> None:
+    """Stops the auto-started llama-server when the chat session ends, so no
+    process is left running in the background. Set AI_KEEP_LOCAL=1 to keep it
+    warm across sessions instead."""
+    if os.environ.get("AI_KEEP_LOCAL") == "1":
+        return
+    import signal
+    import subprocess
+    cfg_dir = os.path.expanduser("~/.config/local-ai")
+    pid_file = os.path.join(cfg_dir, ".llama-server.pid")
+    killed = False
+    try:
+        with open(pid_file, "r", encoding="utf-8") as f:
+            pid = int(f.read().strip())
+        # start_new_session=True made the server its own process group leader
+        os.killpg(pid, signal.SIGTERM)
+        killed = True
+    except Exception:
+        pass
+    try:
+        os.remove(pid_file)
+    except Exception:
+        pass
+    if not killed:
+        # No (valid) pid file but the port answers: a server left over from an
+        # older session or a manual start — honor "no background processes"
+        try:
+            with urlreq.urlopen("http://localhost:8080/health", timeout=1):
+                pass
+            subprocess.run(["pkill", "-f", "llama-server"], capture_output=True)
+            killed = True
+        except Exception:
+            pass
+    if killed:
+        sys.stderr.write("\033[90m[sys] local llama-server stopped — nothing left running in the background.\033[0m\n")
 
 
 def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", show_stats: bool = False) -> str or None:
@@ -734,6 +854,11 @@ def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", sho
         configs = [named[k] for k in order]
 
         for url, headers, model, extra, timeout in configs:
+            # Reaching the local entry as a fallback (cloud down / offline):
+            # boot llama-server on demand instead of failing on a dead port
+            if url.startswith("http://localhost") and not ensure_local_server():
+                sys.stderr.write("\033[90m[sys] local backend unavailable, skipping.\033[0m\n")
+                continue
             body = {"messages": messages, "stream": True, **extra}
             if model:
                 body["model"] = model
@@ -792,14 +917,8 @@ def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", sho
                         print("")
                         if speed_test and show_stats:
                             speed_test.end()
-                        if resolved_model and resolved_model != model and sys.stdout.isatty():
-                            home_dir = os.path.expanduser("~")
-                            target_path = os.path.join(home_dir, "ollama_backup") + "/"
-                            display_model = resolved_model
-                            if display_model.startswith(target_path):
-                                display_model = display_model.replace(target_path, ".../")
-                            sys.stdout.write(f"\033[90m[via {display_model}]\033[0m\n")
-                            sys.stdout.flush()
+                        # (the "[via <resolved model>]" line was dropped — it only
+                        # echoed the provider's dated snapshot name, noise per user)
                         ans_text = "".join(acc)
                         u = usage_obj or {}
                         prompt_chars = sum(len(m.get("content", "")) for m in messages)

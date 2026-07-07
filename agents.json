@@ -26,6 +26,13 @@
       "skills": [
         "caveman"
       ]
+    },
+    {
+      "id": "advisor",
+      "name": "advisor",
+      "icon": "🤖",
+      "model": "deepseek/deepseek-v4-pro",
+      "system": "you are an development advisor and as advisor role all you do are giving advice on every action on other role give to the orchestrator what is the best practice and to avoiding future conflict, leak, security issue for development"
     }
   ]
 }
