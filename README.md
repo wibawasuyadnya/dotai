@@ -1,8 +1,4 @@
 <p align="center">
-  <img src="assets/orkesai-logo.png" alt="dot.ai" width="420">
-</p>
-
-<p align="center">
   A zero-daemon, multi-backend, multi-agent AI for your terminal.<br>
   Chat with <b>Claude</b> (your claude.ai login), <b>Codex</b> (your ChatGPT login),
   <b>OpenRouter</b> (DeepSeek & hundreds more), <b>Gemini</b>, or any <b>local GGUF model</b> (Qwen, Llama, Mistral, …) —
