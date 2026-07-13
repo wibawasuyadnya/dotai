@@ -2683,6 +2683,23 @@ def stream_group_chat(session: dict, user_text: str, images: list = None,
         yield done_ev
 
 
+# When the server is spawned by the packaged desktop app it inherits the bare
+# launchd PATH — the user's `claude` / `codex` CLIs (Homebrew, npm, nvm) would
+# be invisible and the picker would show "setup" forever. Fold the usual
+# install dirs back in.
+def _augment_path() -> None:
+    import glob
+    extra = ["/opt/homebrew/bin", "/usr/local/bin",
+             os.path.expanduser("~/.local/bin"), os.path.expanduser("~/bin"),
+             os.path.expanduser("~/.npm-global/bin")]
+    extra += sorted(glob.glob(os.path.expanduser("~/.nvm/versions/node/*/bin")), reverse=True)[:1]
+    cur = os.environ.get("PATH", "").split(os.pathsep)
+    add = [p for p in extra if os.path.isdir(p) and p not in cur]
+    if add:
+        os.environ["PATH"] = os.pathsep.join(cur + add)
+_augment_path()
+
+
 # Persisted /settings state (startup agent, edit mode) applies to team agents
 # too — real shell env vars still win, exactly like in ai-agent.py
 _REAL_ENV_BACKEND = "AI_BACKEND" in os.environ
