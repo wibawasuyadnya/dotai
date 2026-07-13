@@ -1,4 +1,4 @@
-# File: ~/.config/local-ai/modules/mcp_client.py
+# File: ~/.config/orkesai/modules/mcp_client.py
 """Minimal MCP (Model Context Protocol) client — stdlib only.
 
 Servers are declared in <repo>/mcp.json:
@@ -21,7 +21,7 @@ import subprocess
 import threading
 import urllib.request as urlreq
 
-CFG_DIR = os.path.join(os.path.expanduser("~"), ".config", "local-ai")
+CFG_DIR = os.path.join(os.path.expanduser("~"), ".config", "orkesai")
 MCP_FILE = os.path.join(CFG_DIR, "mcp.json")
 PROTOCOL = "2025-03-26"
 
@@ -85,7 +85,7 @@ class _StdioClient:
         self._rpc("initialize", {
             "protocolVersion": PROTOCOL,
             "capabilities": {},
-            "clientInfo": {"name": "dotai", "version": "0.9"},
+            "clientInfo": {"name": "orkesai", "version": "0.9"},
         })
         self._rpc("notifications/initialized", {}, notify=True)
 
@@ -163,7 +163,7 @@ class _HttpClient:
         self._rpc("initialize", {
             "protocolVersion": PROTOCOL,
             "capabilities": {},
-            "clientInfo": {"name": "dotai", "version": "0.9"},
+            "clientInfo": {"name": "orkesai", "version": "0.9"},
         })
         try:
             self._rpc("notifications/initialized", {}, notify=True)

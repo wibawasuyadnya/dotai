@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# sysctl-aware system profiler for local-ai v1.2.6
+# sysctl-aware system profiler for orkesai v1.2.6
 
 import glob
 import os
@@ -8,7 +8,7 @@ import socket
 import subprocess
 import sys
 
-p_dir = os.path.expanduser("~/.config/local-ai/skills/system")
+p_dir = os.path.expanduser("~/.config/orkesai/skills/system")
 p_path = os.path.join(p_dir, "mysys.md")
 os.makedirs(p_dir, exist_ok=True)
 

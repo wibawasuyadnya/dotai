@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="assets/dotai-logo.png" alt="dot.ai" width="420">
+  <img src="assets/orkesai-logo.png" alt="dot.ai" width="420">
 </p>
 
 <p align="center">
   A zero-daemon, multi-backend, multi-agent AI for your terminal.<br>
   Chat with <b>Claude</b> (your claude.ai login), <b>Codex</b> (your ChatGPT login),
-  <b>OpenRouter</b> (DeepSeek & hundreds more), <b>Gemini</b>, or any <b>local GGUF model</b> (Hermes, Qwen, Llama, …) —
+  <b>OpenRouter</b> (DeepSeek & hundreds more), <b>Gemini</b>, or any <b>local GGUF model</b> (Qwen, Llama, Mistral, …) —
   with automatic fallback between them.
 </p>
 
@@ -45,35 +45,35 @@
 
 ## Installation
 
-One line (installs to `~/.config/local-ai`, hooks your shell, creates your own `.env`):
+One line (installs to `~/.config/orkesai`, hooks your shell, creates your own `.env`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/wibawasuyadnya/dotai/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/wibawasuyadnya/orkesai/main/install.sh | bash
 ```
 
 Other ways:
 
 ```bash
-# npm (global) — installs a `dotai` command that bootstraps on first run
-npm install -g wibawasuyadnya/dotai
+# npm (global) — installs a `orkesai` command that bootstraps on first run
+npm install -g wibawasuyadnya/orkesai
 
 # Homebrew
-brew install wibawasuyadnya/dotai/dotai
+brew install wibawasuyadnya/orkesai/orkesai
 
 # Manual
-git clone https://github.com/wibawasuyadnya/dotai.git ~/.config/local-ai
-echo 'source "$HOME/.config/local-ai/ai-hook.sh"' >> ~/.zshrc   # or ~/.bashrc
-cp ~/.config/local-ai/.env.example ~/.config/local-ai/.env
+git clone https://github.com/wibawasuyadnya/orkesai.git ~/.config/orkesai
+echo 'source "$HOME/.config/orkesai/ai-hook.sh"' >> ~/.zshrc   # or ~/.bashrc
+cp ~/.config/orkesai/.env.example ~/.config/orkesai/.env
 ```
 
 Then open a new terminal and type `ai`. Every install keeps its **own**
 `.env`, `settings.json`, projects and memory — nothing personal ships with
 the repo. Update any time with `curl … | bash` again (or `git pull`).
 
-**Desktop app:** grab `DotAI-arm64.dmg` (Apple Silicon), `DotAI-x64.dmg`
-(Intel Mac) or `DotAI-x64.exe` (Windows, experimental — needs Python 3 on
-PATH) from the [releases page](https://github.com/wibawasuyadnya/dotai/releases/latest).
-Drag DotAI to Applications. It talks to the same local server, so install
+**Desktop app:** grab `OrkesAI-arm64.dmg` (Apple Silicon), `OrkesAI-x64.dmg`
+(Intel Mac) or `OrkesAI-x64.exe` (Windows, experimental — needs Python 3 on
+PATH) from the [releases page](https://github.com/wibawasuyadnya/orkesai/releases/latest).
+Drag OrkesAI to Applications. It talks to the same local server, so install
 the terminal version first. The app is unsigned: first launch is
 right-click → Open. Releasing a new version: `bash deploy/release.sh vX.Y.Z`
 (tags, bumps the brew formula + tap, builds the apps, uploads everything).
@@ -83,12 +83,12 @@ right-click → Open. Releasing a new version: `bash deploy/release.sh vX.Y.Z`
 ## Configuration — pick your backend(s)
 
 All configuration lives in one file: **`.env`** in the install folder
-(`~/.config/local-ai/.env`). No shell knowledge needed — copy the template and
+(`~/.config/orkesai/.env`). No shell knowledge needed — copy the template and
 fill in only what you use:
 
 ```bash
-cp ~/.config/local-ai/.env.example ~/.config/local-ai/.env
-nano ~/.config/local-ai/.env      # or open it in any editor
+cp ~/.config/orkesai/.env.example ~/.config/orkesai/.env
+nano ~/.config/orkesai/.env      # or open it in any editor
 ```
 
 ```dotenv
@@ -162,24 +162,26 @@ ail                             # full chat session on your local model
 
 ---
 
-## Local models (Hermes, or any GGUF)
+## Local models (Qwen3-4B, or any GGUF)
 
 The agent's `local` backend talks to a llama.cpp server on `http://localhost:8080`.
 
 ```bash
-# Start Hermes-4-14B (first run downloads ~9 GB, then it's cached)
-./start-hermes.sh
+# Start Qwen3-4B (first run downloads ~2.5 GB, then it's cached)
+./start-local.sh
 ```
 
-`start-hermes.sh` is just:
+`start-local.sh` is just:
 
 ```bash
-llama-server -hf bartowski/NousResearch_Hermes-4-14B-GGUF:Q4_K_M --port 8080 -c 8192 --jinja
+llama-server -hf bartowski/Qwen_Qwen3-4B-GGUF:Q4_K_M --port 8080 -c 8192 --jinja
 ```
 
-Swap the `-hf` repo for **any GGUF on Hugging Face** to change models
-(Qwen, Llama, Mistral, …). Rough sizing guide: a Q4_K_M GGUF needs ~0.6 GB RAM
-per billion parameters — a 14B model fits in 16–24 GB machines, a 70B does not.
+The default is **Qwen3-4B** — small and generally capable, so it runs on
+mid-range machines, not just 24 GB+ flagships. Swap the `-hf` repo for **any
+GGUF on Hugging Face** to change models (Qwen, Llama, Mistral, …). Rough sizing:
+a Q4_K_M GGUF needs ~0.6 GB RAM per billion parameters — a 4B fits comfortably
+on 8 GB, a 14B wants 16–24 GB, a 70B does not fit at all.
 > **Note:** giant MoE models like DeepSeek V4 (284B) can't run on normal
 > hardware — use them through OpenRouter instead.
 
@@ -201,8 +203,8 @@ AI_BACKEND=local ai init ~/code/my-app -coder
 # A research agent (Claude) in a notes folder
 AI_BACKEND=claude ai init ~/notes/research -brief
 
-# A general Hermes agent in a scratch workspace
-AI_BACKEND=local ai init ~/agents/hermes-lab
+# A general local-model agent in a scratch workspace
+AI_BACKEND=local ai init ~/agents/local-lab
 ```
 
 What `ai init <path> [-skill]` does:
@@ -216,8 +218,8 @@ What `ai init <path> [-skill]` does:
 files anywhere under `skills/` — the filename is the skill name:
 
 ```bash
-# Create skills/dept/hermes-writer.md with your system prompt, then:
-AI_BACKEND=local ai init ~/agents/writer -hermes-writer
+# Create skills/dept/my-writer.md with your system prompt, then:
+AI_BACKEND=local ai init ~/agents/writer -my-writer
 ```
 
 Built-in skills include `-coder`, `-architect`, `-refactor`, `-reviewer`,
@@ -322,10 +324,10 @@ frontend you build sees the same conversations.
 > deploying the Docker stack from `deploy/`, copy that folder up alongside
 > the repo — everything else about the deploy is self-contained.
 
-**Branding assets** live in [`assets/`](assets/): `dotai-logo.png` (wordmark),
-`dotai-icon.png` (square app icon), and `favicon/` (full favicon set +
+**Branding assets** live in [`assets/`](assets/): `orkesai-logo.png` (wordmark),
+`orkesai-icon.png` (square app icon), and `favicon/` (full favicon set +
 webmanifest for the web GUI). The local `gui/` folder carries ready-to-use
-copies: `gui/public/` serves the favicons, and `gui/assets/dotai.icns` is the
+copies: `gui/public/` serves the favicons, and `gui/assets/orkesai.icns` is the
 macOS icon for Electron packaging (`electron/main.js` already sets the dock
 and window icon in dev).
 
@@ -335,7 +337,7 @@ sessions — see [deploy/README.md](deploy/README.md). Sync the local-only GUI
 folder to the VPS with:
 
 ```bash
-rsync -a --exclude node_modules --exclude .next gui/ user@vps:~/local-ai/gui/
+rsync -a --exclude node_modules --exclude .next gui/ user@vps:~/orkesai/gui/
 ```
 
 ---
@@ -391,7 +393,7 @@ rsync -a --exclude node_modules --exclude .next gui/ user@vps:~/local-ai/gui/
 | `ai: command not found` | Open a new terminal, or `source ~/.zshrc` |
 | Claude backend silent / erroring | Run `claude login` once; check `claude -p "hi"` works by itself |
 | **Claude waiting for token reset** | `aio "…"` (OpenRouter) or `ail` (local) — the cascade also does this automatically |
-| `localhost:8080 failed` | Your llama-server isn't running — `./start-hermes.sh` |
+| `localhost:8080 failed` | Your llama-server isn't running — `./start-local.sh` |
 | Wrong/stale model shown in the startup box | The box reflects `AI_BACKEND` + keys at launch; check your exports |
 | OpenRouter 402 / insufficient credits | Top up at openrouter.ai/credits, or use a `:free` model variant |
 
@@ -399,5 +401,5 @@ rsync -a --exclude node_modules --exclude .next gui/ user@vps:~/local-ai/gui/
 
 ## Credits & License
 
-Maintained by **suyadnya**. Based on the MIT-licensed Local-AI Agent — see
+Maintained by **suyadnya**. Based on the MIT-licensed OrkesAI Agent — see
 [LICENSE](LICENSE) for full attribution. Contributions welcome.

@@ -1,4 +1,4 @@
-# File: ~/.config/local-ai/modules/agent_spell.py
+# File: ~/.config/orkesai/modules/agent_spell.py
 import os
 import sys
 import re

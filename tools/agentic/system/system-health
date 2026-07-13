@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # system-health - Context-Aware Real-time Hardware Inspector v1.4.2 [suyadnya]
-# Path: ~/.config/local-ai/tools/agentic/system/system-health
+# Path: ~/.config/orkesai/tools/agentic/system/system-health
 
 set -euo pipefail
 
 # Pointed to the root skills folder
-MYSYS_FILE="$HOME/.config/local-ai/skills/system/mysys.md"
+MYSYS_FILE="$HOME/.config/orkesai/skills/system/mysys.md"
 
 # 1. Fetch Real-time CPU Temperature (Robust hardware monitor search)
 CPU_TEMP="N/A"

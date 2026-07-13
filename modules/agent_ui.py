@@ -1,4 +1,4 @@
-# File: ~/.config/local-ai/modules/agent_ui.py
+# File: ~/.config/orkesai/modules/agent_ui.py
 import os
 import shutil
 import sys
@@ -197,7 +197,7 @@ def draw_session_box(
     active_system_prompt: str,
     clean_name: str
 ) -> None:
-    """DotAI banner left, dim context right (opencode-style split)."""
+    """OrkesAI banner left, dim context right (opencode-style split)."""
     cols = shutil.get_terminal_size((80, 24)).columns
     display_dir = workspace_path
     if display_dir.startswith(home_dir):
@@ -216,10 +216,10 @@ def draw_session_box(
     if is_agent:
         right_parts.append(f"mem {tpm_count}f/{db_turns}t" if memory_active else "mem off")
     right_parts.append(display_dir)
-    left_plain = "● dotai"
+    left_plain = "● orkesai"
     right_plain = " · ".join(right_parts)
     pad = max(2, cols - len(left_plain) - len(right_plain))
-    print(f"\033[1;36m●\033[0m \033[1mdotai\033[0m{' ' * pad}\033[2m{right_plain}\033[0m\n")
+    print(f"\033[1;36m●\033[0m \033[1morkesai\033[0m{' ' * pad}\033[2m{right_plain}\033[0m\n")
 
 
 def echo_user_block(query: str) -> None:
@@ -331,8 +331,8 @@ def run_interactive_selection(
             cmd_to_show = current_cmd.replace("DANGER_FLAGGED:", "")
             display_cmd = cmd_to_show.replace(" >/dev/null 2>&1", "").replace(os.path.expanduser("~"), "~")
             
-            if "/.config/local-ai/projects/" in display_cmd:
-                display_cmd = display_cmd.replace("/.config/local-ai/projects/", "/")
+            if "/.config/orkesai/projects/" in display_cmd:
+                display_cmd = display_cmd.replace("/.config/orkesai/projects/", "/")
 
             idx_str = f"{current_idx + 1:02d}/{num_opts:02d}"
             

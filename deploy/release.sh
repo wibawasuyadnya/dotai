@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DotAI release — the whole flow in one command:
+# OrkesAI release — the whole flow in one command:
 #
 #   bash deploy/release.sh v0.9.2
 #
@@ -13,9 +13,9 @@
 set -euo pipefail
 
 VER="${1:?usage: deploy/release.sh vX.Y.Z}"
-REPO="wibawasuyadnya/dotai"
+REPO="wibawasuyadnya/orkesai"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TAP_DIR="$(mktemp -d)/homebrew-dotai"
+TAP_DIR="$(mktemp -d)/homebrew-orkesai"
 say() { printf '\033[1;36m[release]\033[0m %s\n' "$*"; }
 
 TOKEN=$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill | grep '^password=' | cut -d= -f2-)
@@ -38,20 +38,20 @@ say "sha256: $SHA"
 python3 - "$VER" "$SHA" <<'EOF'
 import re, sys
 ver, sha = sys.argv[1], sys.argv[2]
-fp = "deploy/homebrew/dotai.rb"
+fp = "deploy/homebrew/orkesai.rb"
 s = open(fp).read()
 s = re.sub(r"refs/tags/v[\d.]+\.tar\.gz", f"refs/tags/{ver}.tar.gz", s)
 s = re.sub(r'sha256 "[0-9a-f]{64}"', f'sha256 "{sha}"', s)
 open(fp, "w").write(s)
 EOF
-git add deploy/homebrew/dotai.rb
+git add deploy/homebrew/orkesai.rb
 git commit -m "formula: bump to $VER"
 git push origin main
 
 say "updating tap repo"
-git clone -q "https://github.com/wibawasuyadnya/homebrew-dotai.git" "$TAP_DIR"
-cp deploy/homebrew/dotai.rb "$TAP_DIR/Formula/dotai.rb"
-git -C "$TAP_DIR" commit -aqm "dotai ${VER#v}"
+git clone -q "https://github.com/wibawasuyadnya/homebrew-orkesai.git" "$TAP_DIR"
+cp deploy/homebrew/orkesai.rb "$TAP_DIR/Formula/orkesai.rb"
+git -C "$TAP_DIR" commit -aqm "orkesai ${VER#v}"
 git -C "$TAP_DIR" push -q origin main
 
 # ── 3. desktop apps ──────────────────────────────────────────────────────────
@@ -68,20 +68,20 @@ say "creating GitHub release $VER"
 RID=$(python3 - "$TOKEN" "$VER" <<'EOF'
 import json, sys, urllib.request
 token, ver = sys.argv[1], sys.argv[2]
-body = (f"Install: `curl -fsSL https://raw.githubusercontent.com/wibawasuyadnya/dotai/main/install.sh | bash`"
-        f" · `npm install -g wibawasuyadnya/dotai` · `brew install wibawasuyadnya/dotai/dotai`\n\n"
-        f"Desktop: DotAI-arm64.dmg (Apple Silicon) · DotAI-x64.dmg (Intel Mac) · "
-        f"DotAI-x64.exe (Windows, experimental — needs Python 3 on PATH)")
+body = (f"Install: `curl -fsSL https://raw.githubusercontent.com/wibawasuyadnya/orkesai/main/install.sh | bash`"
+        f" · `npm install -g wibawasuyadnya/orkesai` · `brew install wibawasuyadnya/orkesai/orkesai`\n\n"
+        f"Desktop: OrkesAI-arm64.dmg (Apple Silicon) · OrkesAI-x64.dmg (Intel Mac) · "
+        f"OrkesAI-x64.exe (Windows, experimental — needs Python 3 on PATH)")
 req = urllib.request.Request(
-    "https://api.github.com/repos/wibawasuyadnya/dotai/releases",
-    data=json.dumps({"tag_name": ver, "name": f"DotAI {ver}", "body": body,
+    "https://api.github.com/repos/wibawasuyadnya/orkesai/releases",
+    data=json.dumps({"tag_name": ver, "name": f"OrkesAI {ver}", "body": body,
                      "make_latest": "true"}).encode(),
     headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
     method="POST")
 print(json.load(urllib.request.urlopen(req))["id"])
 EOF
 )
-for f in DotAI-arm64.dmg DotAI-x64.dmg DotAI-x64.exe; do
+for f in OrkesAI-arm64.dmg OrkesAI-x64.dmg OrkesAI-x64.exe; do
     say "uploading $f"
     curl -fsS -o /dev/null \
         -X POST "https://uploads.github.com/repos/$REPO/releases/$RID/assets?name=$f" \

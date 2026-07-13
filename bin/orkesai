@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# DotAI launcher for npm-global installs (`npm install -g wibawasuyadnya/dotai`).
-# First run bootstraps ~/.config/local-ai from the npm package copy via
+# OrkesAI launcher for npm-global installs (`npm install -g wibawasuyadnya/orkesai`).
+# First run bootstraps ~/.config/orkesai from the npm package copy via
 # install.sh, then every run just launches the agent.
 #
-#   dotai            interactive chat
-#   dotai <question> one-shot question
-#   dotai update     re-run the installer (pull the latest code)
+#   orkesai            interactive chat
+#   orkesai <question> one-shot question
+#   orkesai update     re-run the installer (pull the latest code)
 set -euo pipefail
 
-DIR="$HOME/.config/local-ai"
+DIR="$HOME/.config/orkesai"
 PKG="$(cd "$(dirname "$(readlink "$0" || echo "$0")")/.." && pwd)"
 
 if [ "${1:-}" = "update" ]; then

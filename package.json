@@ -1,9 +1,9 @@
 {
-  "name": "dotai-agent",
-  "version": "0.9.0",
-  "description": "DotAI — local multi-agent AI for your terminal (Claude, Codex, OpenRouter, local llama.cpp)",
+  "name": "orkesai-agent",
+  "version": "0.10.0",
+  "description": "OrkesAI — local multi-agent AI for your terminal (Claude, Codex, OpenRouter, local llama.cpp)",
   "bin": {
-    "dotai": "bin/dotai"
+    "orkesai": "bin/orkesai"
   },
   "files": [
     "bin/",
@@ -17,15 +17,15 @@
     "install.sh",
     ".env.example",
     "agents.json",
-    "start-hermes.sh",
+    "start-local.sh",
     "README.md",
     "LICENSE"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wibawasuyadnya/dotai.git"
+    "url": "git+https://github.com/wibawasuyadnya/orkesai.git"
   },
-  "homepage": "https://wibawasuyadnya.github.io/dotai",
+  "homepage": "https://wibawasuyadnya.github.io/orkesai",
   "license": "MIT",
   "os": [
     "darwin",

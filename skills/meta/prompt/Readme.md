@@ -10,7 +10,7 @@ Generate cohesive, project-matched graphics (banners, logos, assets) on your fir
 
 ```text
 ~ ❯ prompt writer image
-[01/02] ❯ [prompt writer image] ~/.config/local-ai/tools/ai-prompt-writer-image | cat
+[01/02] ❯ [prompt writer image] ~/.config/orkesai/tools/ai-prompt-writer-image | cat
 :: ↵ run  Esc: 
 ```
 2. **Refine & Copy:** Tweak details in the console, then type **`/c`** to copy only the clean, compiled prompt.

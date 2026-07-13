@@ -1,4 +1,4 @@
-# Local-AI Agent Blueprint
+# OrkesAI Agent Blueprint
 
 > **Syntax**: `[command / execution] ──> [intent1], [intent2], [intent3]`  
 > **Delimiter**: `" ──> "` (Three-dash arrow with a trailing space)
@@ -17,8 +17,8 @@
 
 ```properties
 # --- Session-Test - This is a Project Workspace (Skill-Primed) --
-ai init ~/.config/local-ai/projects/session-test --init ---> session test, projects session, projects
-ai init ~/.config/local-ai/projects/session-test-2 --init ---> session test 2, projects session, projects
+ai init ~/.config/orkesai/projects/session-test --init ---> session test, projects session, projects
+ai init ~/.config/orkesai/projects/session-test-2 --init ---> session test 2, projects session, projects
 
 # --- Dynamic File Reader ---
 [TOOL] cat $1 ---> view file, read file, show file, vf
@@ -32,53 +32,53 @@ ai init ~/.config/local-ai/projects/session-test-2 --init ---> session test 2, p
 
 ```properties
 # --- OpenCode Direct Terminal Launcher ---
-~/.config/local-ai/tools/subsec/opencode-bridge/opencode-bridge ---> opencode bridge, bridge, ocb
+~/.config/orkesai/tools/subsec/opencode-bridge/opencode-bridge ---> opencode bridge, bridge, ocb
 
 # --- Odysseus Direct Terminal Launcher ---
-~/.config/local-ai/tools/subsec/odysseus-bridge/odysseus-bridge ---> odysseus bridge, bridge, ody, odb
+~/.config/orkesai/tools/subsec/odysseus-bridge/odysseus-bridge ---> odysseus bridge, bridge, ody, odb
 
 # --- Hermes Direct Browser Workspace Launcher ---
-~/.config/local-ai/tools/subsec/hermes-bridge/hermes-bridge ---> hermes bridge, bridge, hmb, herm
+~/.config/orkesai/tools/subsec/hermes-bridge/hermes-bridge ---> hermes bridge, bridge, hmb, herm
 ```
 
 ## 2. On-Demand System Prompts & Role Injections (Skills)
 
 ```properties
-# [TOOL] cat ~/.config/local-ai/skills/identity/business/mybiz.md --leaf ---> mybiz, show business profile, view mybiz
-# [TOOL] cat ~/.config/local-ai/skills/identity/marketing/strategy.md --leaf ---> marketing strategy, growth strategy, view marketing
-# [TOOL] cat ~/.config/local-ai/skills/identity/workout/routine.md --leaf ---> routine, fitness profile, workout routine
+# [TOOL] cat ~/.config/orkesai/skills/identity/business/mybiz.md --leaf ---> mybiz, show business profile, view mybiz
+# [TOOL] cat ~/.config/orkesai/skills/identity/marketing/strategy.md --leaf ---> marketing strategy, growth strategy, view marketing
+# [TOOL] cat ~/.config/orkesai/skills/identity/workout/routine.md --leaf ---> routine, fitness profile, workout routine
 ```
 
 ## 3. Dynamic Context-Injected Tools (RAG)
 
 ```properties
 # --- Dynamic Host Profiler & System Analytics ---
-[TOOL] cat ~/.config/local-ai/skills/system/mysys.md --leaf ---> mysys, show mysys, view sys, mysys doc
-[TOOL] ~/.config/local-ai/tools/generate-profile ---> generate profile, update sys profile, sync mysys
+[TOOL] cat ~/.config/orkesai/skills/system/mysys.md --leaf ---> mysys, show mysys, view sys, mysys doc
+[TOOL] ~/.config/orkesai/tools/generate-profile ---> generate profile, update sys profile, sync mysys
 
 # --- Pre-Install Zero-Trust AUR Package & PKGBUILD Auditor ---
-[TOOL] ~/.config/local-ai/tools/agentic/system/aur-audit ---> aur audit, audit package
+[TOOL] ~/.config/orkesai/tools/agentic/system/aur-audit ---> aur audit, audit package
 
 # --- Host Security Surface & Vulnerability Intelligence (SECAUD) ---
-[TOOL] ~/.config/local-ai/tools/agentic/system/security-audit --leaf ---> security audit, secaud, system audit
+[TOOL] ~/.config/orkesai/tools/agentic/system/security-audit --leaf ---> security audit, secaud, system audit
 
 # --- System Optimization (Improve System Performance) ---
-[TOOL] ~/.config/local-ai/tools/agentic/system/system-optimizer --leaf ---> system optimizer, sysop, optimize
+[TOOL] ~/.config/orkesai/tools/agentic/system/system-optimizer --leaf ---> system optimizer, sysop, optimize
 
 # --- System Logs & Diagnostics (Compressed Stream Triage) ---
-[TOOL] ~/.config/local-ai/tools/agentic/system/log-checker ---> log checker, ailog, log check, check errors, system crashed, events
+[TOOL] ~/.config/orkesai/tools/agentic/system/log-checker ---> log checker, ailog, log check, check errors, system crashed, events
 
 # --- System Resources & Diagnosis (System Health) ---
-[TOOL] ~/.config/local-ai/tools/agentic/system/system-health ---> system health, sysh, health, system diagnosis, why is my system slow
+[TOOL] ~/.config/orkesai/tools/agentic/system/system-health ---> system health, sysh, health, system diagnosis, why is my system slow
 
 # --- Pending Updates ---
-[TOOL] ~/.config/local-ai/tools/agentic/system/update-inspector --leaf ---> update inspector, inspector, ui
+[TOOL] ~/.config/orkesai/tools/agentic/system/update-inspector --leaf ---> update inspector, inspector, ui
 
 # --- Disk Usage ---
 [TOOL] df -h / ---> disk usage, drive usage
 
 # --- AI Status & Provider Diagnostics ---
-[TOOL] ~/.config/local-ai/tools/agentic/system/ai-status --s --leaf ---> ai status, aistat, status, aistatus 
+[TOOL] ~/.config/orkesai/tools/agentic/system/ai-status --s --leaf ---> ai status, aistat, status, aistatus 
 
 # --- Weather & Live Networking ---
 [TOOL] curl -s "wttr.in/?format=3" --s --cat ---> weather simple, wttr, weather, rain forecast simple
@@ -93,50 +93,50 @@ ai init ~/.config/local-ai/projects/session-test-2 --init ---> session test 2, p
 
 ```properties
 # --- Local-Ai Agent Blueprint (CheatSheet) ---
-~/.config/local-ai/tools/blueprint --s --leaf ---> cheatsheet, bp, cs, blueprint
+~/.config/orkesai/tools/blueprint --s --leaf ---> cheatsheet, bp, cs, blueprint
 
 # --- AI-Generated Git Commits ---
-~/.config/local-ai/tools/agentic/system/ai-commit ---> ai-commit, gc, git commit
+~/.config/orkesai/tools/agentic/system/ai-commit ---> ai-commit, gc, git commit
 
 # --- Index-Map (Structural Repo Profile Compiler) ---
-[TOOL] ~/.config/local-ai/tools/map/index-map --cat ---> index map, im
+[TOOL] ~/.config/orkesai/tools/map/index-map --cat ---> index map, im
 
 # --- Server Lifecycle Management ---
-~/.config/local-ai/tools/tools/subsec/server/kill-ai-servers ---> killserver, ks
+~/.config/orkesai/tools/tools/subsec/server/kill-ai-servers ---> killserver, ks
 ```
 
 ## 5. TUI (Terminal User Interface) Programs
 
 ```properties
 # --- Ai-Prompt-Writer-Imaage - Interactive TUI Console ---
-[TOOL] ~/.config/local-ai/tools/subsec/prompt/ai-prompt-writer-image --cat ---> prompt writer image, image prompt, ip
+[TOOL] ~/.config/orkesai/tools/subsec/prompt/ai-prompt-writer-image --cat ---> prompt writer image, image prompt, ip
 # --- Ai-Prompt-Writer - Interactive TUI Console ---
-[TOOL] ~/.config/local-ai/tools/subsec/prompt/ai-prompt-writer --cat ---> prompt writer, prompt
+[TOOL] ~/.config/orkesai/tools/subsec/prompt/ai-prompt-writer --cat ---> prompt writer, prompt
 
 # --- Fusion-Research Engine (Compound MoA / Self-Fusion) ---
-~/.config/local-ai/tools/agentic/fusion/f_research -r ---> fusion research, fusion, fr, deep research
+~/.config/orkesai/tools/agentic/fusion/f_research -r ---> fusion research, fusion, fr, deep research
 # --- AI Deep Research TUI ---
-~/.config/local-ai/tools/subsec/research-tui/deep-research ---> deep research, research, dr
+~/.config/orkesai/tools/subsec/research-tui/deep-research ---> deep research, research, dr
 
 # --- Custom TUI Applications ---
-~/.config/local-ai/tools/subsec/basepage-tui/basepage.py ---> basepage, base, basepage tui, rss
-~/.config/local-ai/tools/subsec/basepage-tui/basetracker.py ---> basetracker, base, basetracker tui
+~/.config/orkesai/tools/subsec/basepage-tui/basepage.py ---> basepage, base, basepage tui, rss
+~/.config/orkesai/tools/subsec/basepage-tui/basetracker.py ---> basetracker, base, basetracker tui
 
 # --- Media & Volume Controllers (Pure Reactive) ---
-~/.config/local-ai/tools/subsec/media/media.py ---> tuiamp, winamp, media
+~/.config/orkesai/tools/subsec/media/media.py ---> tuiamp, winamp, media
 
 # --- Article & YouTube Summarizers ---
-~/.config/local-ai/tools/subsec/ai-summary/llmsum.py ---> llmsum, ytsum, summary, sum
+~/.config/orkesai/tools/subsec/ai-summary/llmsum.py ---> llmsum, ytsum, summary, sum
 
 # --- Local-Ai Tablet Voice Bridge ---
-~/.config/local-ai/tools/subsec/voice/voice-query ---> voice, voice query, voice bridge
+~/.config/orkesai/tools/subsec/voice/voice-query ---> voice, voice query, voice bridge
 ```
 
 ## 6. Graphical Applications & Webapps
 
 ```properties
 # --- System App Launcher (Ultra-Light Rofi-TUI) ---
-~/.config/local-ai/tools/subsec/app-launcher/app-launcher.py ---> app launcher, app
+~/.config/orkesai/tools/subsec/app-launcher/app-launcher.py ---> app launcher, app
 
 # --- Native Webapp Wrappers & Browsers ---
 omarchy-launch-webapp https://music.youtube.com/ ---> youtube music, yt, music, youtube
@@ -147,26 +147,26 @@ nohup uwsm app -- brave-origin --user-data-dir="~/.config/BraveSoftware/brave-sp
 
 ```properties
 # --- Stopwatch ---
-~/.config/local-ai/tools/subsec/stopwatch/stopwatch.py ---> stopwatch py, sw, stopwatch
-~/.config/local-ai/tools/subsec/stopwatch/stopwatch.sh ---> stopwatch sh, sw, stopwatch
+~/.config/orkesai/tools/subsec/stopwatch/stopwatch.py ---> stopwatch py, sw, stopwatch
+~/.config/orkesai/tools/subsec/stopwatch/stopwatch.sh ---> stopwatch sh, sw, stopwatch
 
 # --- Notes ---
-~/.config/local-ai/tools/subsec/notes/notes.sh ---> notes, open notes, add to notes
+~/.config/orkesai/tools/subsec/notes/notes.sh ---> notes, open notes, add to notes
 
 # --- State & Workflow Management ---
-~/.config/local-ai/tools/subsec/hyprstate/work ---> hyprstate work, work, hs, hyprstate
-~/.config/local-ai/tools/subsec/hyprstate/clean ---> hyprstate clean, clean, hs, hyprstate
-~/.config/local-ai/tools/subsec/hyprstate/gitcom ---> hyprstate gitcom, gitcom, gcom, hs, hyprstate
-~/.config/local-ai/tools/subsec/hyprstate/media ---> hyprstate media, media, hs, hyprstate
+~/.config/orkesai/tools/subsec/hyprstate/work ---> hyprstate work, work, hs, hyprstate
+~/.config/orkesai/tools/subsec/hyprstate/clean ---> hyprstate clean, clean, hs, hyprstate
+~/.config/orkesai/tools/subsec/hyprstate/gitcom ---> hyprstate gitcom, gitcom, gcom, hs, hyprstate
+~/.config/orkesai/tools/subsec/hyprstate/media ---> hyprstate media, media, hs, hyprstate
 ```
 
 ## 8. Testing (Concepts & Prototypes)
 ```properties
 # --- Pixel-Browse - Headless Visual Web Ingestion (((wip))) ---
-[TOOL] ~/.config/local-ai/tools/subsec/headless-chromium/pixel-browse --cat ---> pixel browse, headless, chromium, pixel browser
+[TOOL] ~/.config/orkesai/tools/subsec/headless-chromium/pixel-browse --cat ---> pixel browse, headless, chromium, pixel browser
 
 # --- Coding-Triangle-Loop - Interactive TUI Console (((wip))) ---
-[TOOL] ~/.config/local-ai/tools/agentic/coding/coding-triangle-loop --cat ---> coding loop, coding, triangle, loop
+[TOOL] ~/.config/orkesai/tools/agentic/coding/coding-triangle-loop --cat ---> coding loop, coding, triangle, loop
 
 # --- Learned System Shortcuts (((wip))) ---
 # ss -tuln ---> how do i view active network ports, active ports, network ports

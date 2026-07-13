@@ -1,4 +1,4 @@
-# File: ~/.config/local-ai/modules/agent_skills.py
+# File: ~/.config/orkesai/modules/agent_skills.py
 import os
 import sys
 import re

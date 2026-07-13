@@ -14,7 +14,7 @@ tools/subsec/voice/server.pem
 .auto-f
 ai-history
 tools/agentic/fusion/logs
-index-map-local-ai.txt
+index-map-orkesai.txt
 .active_cd*
 .request_log
 .agent
@@ -40,3 +40,5 @@ projects/*
 !projects/Readme.md
 history.md
 index-map-*.txt
+automations.json
+groups.json

@@ -465,8 +465,8 @@ def main():
         display_map = output_file
         if display_map.startswith(home_dir):
             display_map = display_map.replace(home_dir, "~", 1)
-        if "/.config/local-ai/projects/" in display_map:
-            display_map = display_map.replace("/.config/local-ai/projects/", "/")
+        if "/.config/orkesai/projects/" in display_map:
+            display_map = display_map.replace("/.config/orkesai/projects/", "/")
             
         print(f"✔ Compressed index-map: {display_map}")
     except (IOError, OSError):
@@ -477,8 +477,8 @@ def main():
             display_fallback = fallback_file
             if display_fallback.startswith(home_dir):
                 display_fallback = display_fallback.replace(home_dir, "~", 1)
-            if "/.config/local-ai/projects/" in display_fallback:
-                display_fallback = display_fallback.replace("/.config/local-ai/projects/", "/")
+            if "/.config/orkesai/projects/" in display_fallback:
+                display_fallback = display_fallback.replace("/.config/orkesai/projects/", "/")
                 
             print(f"⚠ SCRIPT_DIR is read-only. Saved to fallback: {display_fallback}")
         except Exception as e: print(f"❌ Error: Failed to write map. {e}")

@@ -1,4 +1,4 @@
-# Deploying DotAI to a VPS (Docker)
+# Deploying OrkesAI to a VPS (Docker)
 
 Runs the multi-agent app on a small VPS (tested target: Biznet Gio 4 vCPU /
 8 GB / 60 GB). Inference happens on OpenRouter, so the VPS only serves the
@@ -19,8 +19,8 @@ browser / Electron ──► Caddy :80/:443 (basic auth)
 # Ubuntu/Debian
 curl -fsSL https://get.docker.com | sh
 
-git clone https://github.com/suyadnya/local-ai.git
-cd local-ai/deploy
+git clone https://github.com/suyadnya/orkesai.git
+cd orkesai/deploy
 cp .env.example .env
 ```
 
@@ -29,7 +29,7 @@ your machine before building:
 
 ```bash
 # run on your Mac
-rsync -a --exclude node_modules --exclude .next gui/ user@vps:~/local-ai/gui/
+rsync -a --exclude node_modules --exclude .next gui/ user@vps:~/orkesai/gui/
 ```
 
 Edit `deploy/.env`:

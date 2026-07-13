@@ -3,8 +3,8 @@
 
 set -euo pipefail
 
-MYSYS_FILE="$HOME/.config/local-ai/skills/system/mysys.md"
-CURSOR_FILE="$HOME/.cache/local-ai/log-checker.cursor"
+MYSYS_FILE="$HOME/.config/orkesai/skills/system/mysys.md"
+CURSOR_FILE="$HOME/.cache/orkesai/log-checker.cursor"
 mkdir -p "$(dirname "$CURSOR_FILE")"
 
 echo "# ACTIVE SYSTEM DIAGNOSTICS & LOG TRIAGE"

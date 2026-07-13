@@ -3,7 +3,7 @@
 
 import sys, os, json, re, tty, termios, select
 
-CFG_DIR = os.path.expanduser("~/.config/local-ai")
+CFG_DIR = os.path.expanduser("~/.config/orkesai")
 DEPT_SKILLS_DIR = os.path.join(CFG_DIR, "skills", "dept")
 TOKEN_RE = re.compile(r"[^\w\s]")
 STOP_WORDS = {"is", "what", "it", "do", "any", "i", "have", "the", "a", "an", "on", "to", "for", "me", "you", "my", "your", "we", "us", "are", "about", "in", "how"}

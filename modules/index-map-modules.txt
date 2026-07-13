@@ -1,7 +1,7 @@
 # CODEBASE INDEX MAP (UNIVERSAL ARCHITECTURE REFERENCE)
 # Generated on      : 2026-07-02 16:38
 # Project Workspace : modules
-# Target Directory  : ~/.config/local-ai/modules
+# Target Directory  : ~/.config/orkesai/modules
 # -----------------------------------------------------------------------------------------
 # INSTRUCTIONS:
 # This flat-map represents the structural outline of the codebase. It lists file paths, 
@@ -19,7 +19,7 @@
 #   ├── ai-agent-sessions        - Description: SQLite-backed session, checkpoint, and turn logger with Global Handoff
 #   ├── ai-agent-skills          - Local-Ai On-Demand Skill Selector [dept-backed]
 #   ├── chat                     - chat - Unified Agentic Brainstorm, Thinking & Follow-up Engine v2.5.1
-#   └── speed_test.py            - ~/.config/local-ai/modules/speed_test.py
+#   └── speed_test.py            - ~/.config/orkesai/modules/speed_test.py
 # -----------------------------------------------------------------------------------------
 [py:agent_context.py] imp:shutil | fn:tokenize,load_context_entries,jaccard_search,clean_tool_prefix
 [py:agent_core.py] imp:agent_ui,requests,urllib | fn:extract_stream_content,stream,stream_response,get_accurate_token_count,show_memory_status,prune_history

@@ -1,4 +1,4 @@
-# ~/.config/local-ai/modules/speed_test.py
+# ~/.config/orkesai/modules/speed_test.py
 import time
 import sys
 

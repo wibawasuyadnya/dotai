@@ -2,7 +2,7 @@
 
 # Paths & Binary Tracking
 OPENCODE_BIN="opencode"
-PROFILE_DIR="$HOME/.config/local-ai/tools/subsec/opencode-bridge"
+PROFILE_DIR="$HOME/.config/orkesai/tools/subsec/opencode-bridge"
 
 # --- Intelligent Path Target Resolution ---
 if [ -d "$1" ]; then

@@ -3,8 +3,8 @@
 
 set -euo pipefail
 
-MYSYS_FILE="$HOME/.config/local-ai/skills/system/mysys.md"
-SYSOP_FILE="$HOME/.config/local-ai/skills/system/system-optimizer.md"
+MYSYS_FILE="$HOME/.config/orkesai/skills/system/mysys.md"
+SYSOP_FILE="$HOME/.config/orkesai/skills/system/system-optimizer.md"
 
 echo "# SYSTEM AUTOMATION & OPTIMIZATION PROFILE"
 echo ""

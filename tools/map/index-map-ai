@@ -10,7 +10,7 @@ except ImportError: pass
 try: import readline
 except ImportError: pass
 
-CFG_DIR = os.path.expanduser("~/.config/local-ai")
+CFG_DIR = os.path.expanduser("~/.config/orkesai")
 
 class InlineSpinner:
     def __init__(self): self.chars, self.active, self.thread = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", False, None
@@ -67,7 +67,7 @@ def call_service(messages, stream_out=True):
     if okey:
         configs.append((
             "https://openrouter.ai/api/v1/chat/completions",
-            {"Authorization": f"Bearer {okey}", "HTTP-Referer": "https://github.com/suyadnya/local-ai"},
+            {"Authorization": f"Bearer {okey}", "HTTP-Referer": "https://github.com/suyadnya/orkesai"},
             os.environ.get("OPENROUTER_MODEL", "openrouter/free"),
             {},
             180

@@ -2,7 +2,7 @@
 # hermes-bridge - On-Demand Server & Web Workspace Initializer v1.0.1
 
 PORT=9119
-ENV_FILE="$HOME/.config/local-ai/.env"
+ENV_FILE="$HOME/.config/orkesai/.env"
 
 # --- Load Environment Variables from .env if present ---
 if [ -f "$ENV_FILE" ]; then

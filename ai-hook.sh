@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# DotAI Agent Hook v0.9.0
+# OrkesAI Agent Hook v0.9.0
 
 [[ $- != *i* ]] && return
 
-_AI_DIR="$HOME/.config/local-ai"
+_AI_DIR="$HOME/.config/orkesai"
 _AI_SCRIPT_PATH="$_AI_DIR/ai-agent.py"
 [[ -f "$_AI_SCRIPT_PATH" ]] || return
 

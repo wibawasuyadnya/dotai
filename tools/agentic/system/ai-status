@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ai-status - Diagnostics for Local-AI Agent Stack v1.3.8 [suyadnya]
+# ai-status - Diagnostics for OrkesAI Agent Stack v1.3.8 [suyadnya]
 
 set -euo pipefail
 
@@ -44,11 +44,11 @@ local_status=$(curl -s -I --connect-timeout 1.0 "http://localhost:8080" >/dev/nu
 
 # Fetch cloud-only metrics and prune old logs in a single Python pass
 request_stats="0|0|0|0"
-log_file="$HOME/.config/local-ai/.request_log"
+log_file="$HOME/.config/orkesai/.request_log"
 if [[ -f "$log_file" ]]; then
     request_stats=$(python3 -c "
 import os, time
-log_file = os.path.expanduser('~/.config/local-ai/.request_log')
+log_file = os.path.expanduser('~/.config/orkesai/.request_log')
 now = int(time.time())
 day_ago, min_ago = now - 86400, now - 60
 rpd = {'gemini': 0, 'openrouter': 0}

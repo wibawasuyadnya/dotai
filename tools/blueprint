@@ -5,7 +5,7 @@ import os
 import re
 import sys
 
-CONTEXT_FILE = os.path.expanduser("~/.config/local-ai/ai-context.md")
+CONTEXT_FILE = os.path.expanduser("~/.config/orkesai/ai-context.md")
 
 if not os.path.exists(CONTEXT_FILE):
     print(f"❌ Error: Configuration file not found at {CONTEXT_FILE}", file=sys.stderr)

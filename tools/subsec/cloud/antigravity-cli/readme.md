@@ -5,7 +5,7 @@
 
 ```ini
 # --- Launch a transient Antigravity CLI ---
-bind = SUPER, X, exec, kitty sh -c '$HOME/.config/local-ai/antigravity-cli/ytsum.py'
+bind = SUPER, X, exec, kitty sh -c '$HOME/.config/orkesai/antigravity-cli/ytsum.py'
 ```
 
 ```ini

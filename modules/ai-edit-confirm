@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# DotAI PreToolUse permission gate for Claude Code edit mode ("ask").
+# OrkesAI PreToolUse permission gate for Claude Code edit mode ("ask").
 # Claude Code runs this hook before Edit/Write/Bash; it asks y/n on the
 # terminal and answers with an allow/deny permission decision.
 import json
 import os
 import sys
 
-sys.path.append(os.path.join(os.path.expanduser("~/.config/local-ai"), "modules"))
+sys.path.append(os.path.join(os.path.expanduser("~/.config/orkesai"), "modules"))
 try:
     from agent_ui import render_diff
 except Exception:

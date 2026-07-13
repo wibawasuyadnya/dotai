@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# File: ~/.config/local-ai/modules/ai-agent-sessions [v0.8.9.12]
+# File: ~/.config/orkesai/modules/ai-agent-sessions [v0.8.9.12]
 # Description: SQLite-backed session, checkpoint, and turn logger with Global Handoff
 
 import sys
@@ -10,7 +10,7 @@ import time
 import re
 from contextlib import closing
 
-CFG_DIR = os.path.expanduser("~/.config/local-ai")
+CFG_DIR = os.path.expanduser("~/.config/orkesai")
 SESSIONS_DIR = os.path.join(CFG_DIR, "projects", "database")
 os.makedirs(SESSIONS_DIR, exist_ok=True)
 
@@ -21,7 +21,7 @@ def tokenize(text: str) -> List[str]:
     return [w for w in TOKEN_RE.sub(" ", text.lower()).split() if len(w) > 1 and w not in STOP_WORDS] if text else []
 
 # Dynamic imports for sibling helpers
-sys.path.append(os.path.expanduser("~/.config/local-ai/modules"))
+sys.path.append(os.path.expanduser("~/.config/orkesai/modules"))
 try:
     import agent_ui as ui
     get_key = ui.get_key
@@ -67,7 +67,7 @@ def print_session_box(workspace: str) -> None:
     box_w = 46
     
     lines = [
-        " >_ Local-AI Session Manager", "", 
+        " >_ OrkesAI Session Manager", "", 
         f" model:     {model}", 
         f" directory: {disp}", 
         f" skill:     {skill}", 

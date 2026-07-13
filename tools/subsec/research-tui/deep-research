@@ -151,9 +151,9 @@ def print_header(title):
 def run_research_engine(topic, use_hermes=False):
     """Orchestrates research threads cleanly without blocking pipe stalls."""
     if use_hermes:
-        bridge_path = os.path.expanduser("~/.config/local-ai/tools/subsec/research-tui/hermes-cli")
+        bridge_path = os.path.expanduser("~/.config/orkesai/tools/subsec/research-tui/hermes-cli")
     else:
-        bridge_path = os.path.expanduser("~/.config/local-ai/tools/subsec/research-tui/odysseus-cli")
+        bridge_path = os.path.expanduser("~/.config/orkesai/tools/subsec/research-tui/odysseus-cli")
         
     try:
         # Spawn the bridge as a background pipe with buffered output
@@ -233,7 +233,7 @@ def main():
             sys.stdout.flush()
             
             # Launch llmsum.py using expanded path resolution
-            llmsum_path = os.path.expanduser("~/.config/local-ai/tools/subsec/ai-summary/llmsum.py")
+            llmsum_path = os.path.expanduser("~/.config/orkesai/tools/subsec/ai-summary/llmsum.py")
             subprocess.run(["python3", llmsum_path, "--file", temp_path])
         except Exception as e:
             print(f"\nError starting KoKo Read-Aloud: {str(e)}")

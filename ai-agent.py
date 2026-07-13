@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# DotAI Agent [suyadnya] [v0.9.0]
-# Path: ~/.config/local-ai/ai-agent.py
+# OrkesAI Agent [suyadnya] [v0.9.0]
+# Path: ~/.config/orkesai/ai-agent.py
 
 import os
 import sys
@@ -12,7 +12,7 @@ import threading
 import urllib.request as urlreq
 
 # Configuration constants
-CFG_DIR = os.path.expanduser("~/.config/local-ai")
+CFG_DIR = os.path.expanduser("~/.config/orkesai")
 CONTEXT_FILE = os.path.join(CFG_DIR, "ai-context.md")
 SKILLS_DIR = os.path.join(CFG_DIR, "skills")
 SESSIONS_DIR = os.path.join(CFG_DIR, "projects", "database")
@@ -39,7 +39,7 @@ def load_env_file(path: str) -> None:
                 val = val.strip()
                 # Unquoted values may carry an inline comment (KEY=x  # note)
                 if not val.startswith(('"', "'")):
-                    val = re.split(r"\s+#", val, 1)[0].strip()
+                    val = re.split(r"\s+#", val, maxsplit=1)[0].strip()
                 val = val.strip('"').strip("'")
                 if key and key not in os.environ:
                     os.environ[key] = val
@@ -213,6 +213,152 @@ def stream_llm_response(messages: list, prefix: str = "AI: ", show_stats: bool =
     return core.stream_response(messages, prefix, CFG_DIR, show_stats)
 
 
+# ── GUI features in the terminal: /group · /auto · /models ───────────────────
+# These reuse the exact same stores and engine as the GUI (groups.json,
+# automations.json, the group session files), so both frontends stay in sync.
+
+def _consume_service_stream(svc, gen):
+    """Print a stream_chat/stream_group_chat event stream: role headers,
+    tokens, y/n confirm prompts (answered inline before resuming)."""
+    for ev in gen:
+        t = ev.get("type")
+        if t == "role":
+            a = svc.get_agent(ev.get("id", ""))
+            engine = f"{a.get('backend', 'openrouter')} · {(a.get('model') or '').split('/')[-1]}"
+            print(f"\n\033[1;36m▪ {ev.get('name', '')}\033[0m \033[2m@{ev.get('id', '')} · {engine}\033[0m")
+        elif t == "token":
+            sys.stdout.write(ev.get("text", ""))
+            sys.stdout.flush()
+        elif t == "confirm":
+            print(f"\n\033[1;33m[allow?]\033[0m {ev.get('action', '')}")
+            if ev.get("detail"):
+                print(f"\033[2m{str(ev['detail'])[:2000]}\033[0m")
+            try:
+                ans = input("  y/n ❯ ").strip().lower()
+            except EOFError:
+                ans = "n"
+            svc.resolve_confirm(ev.get("id", ""), ans in ("y", "yes"))
+        elif t == "offline":
+            svc.resolve_confirm(ev.get("id", ""), False)
+            print("\033[1;31m[offline] cloud unreachable — turn paused\033[0m")
+        elif t == "error":
+            print(f"\n\033[1;31m[error] {ev.get('message', '')}\033[0m")
+        elif t == "done":
+            u = ev.get("usage") or {}
+            print(f"\n\033[2m{u.get('in', 0):,} in · {u.get('out', 0):,} out\033[0m")
+    print()
+
+
+def group_command(query: str) -> None:
+    """/group — the GUI's multi-@role groups. list · add · rm · <name> <msg>."""
+    import agent_service as svc
+    rest = query.split(None, 1)[1].strip() if " " in query else ""
+    groups = svc.list_groups()
+    if not rest or rest == "list":
+        for g in groups:
+            print(f"  \033[1m{g['icon']} {g['name']:<22}\033[0m \033[2m"
+                  + " ".join("@" + p for p in g.get("participants", [])) + "\033[0m")
+        if not groups:
+            print("\033[2m  no groups yet\033[0m")
+        print("\033[2m  /group <name> <message> · /group add <name> @role @role… · /group rm <name>\033[0m\n")
+        return
+    parts = rest.split()
+    if parts[0] == "add" and len(parts) >= 3:
+        roles = [p.lstrip("@") for p in parts[2:] if p.startswith("@")]
+        name = " ".join(p for p in parts[1:] if not p.startswith("@"))
+        g, err = svc.create_group({"name": name, "participants": roles})
+        print(f"\033[1;31m[group] {err}\033[0m\n" if err
+              else f"\033[1;33m[group] created '{g['name']}' with " + " ".join("@" + p for p in g["participants"]) + "\033[0m\n")
+        return
+    if parts[0] == "rm" and len(parts) >= 2:
+        target = " ".join(parts[1:]).lower()
+        g = next((x for x in groups if x["name"].lower() == target or x["id"] == target), None)
+        if not g:
+            print(f"\033[1;31m[group] no group named '{target}'\033[0m\n")
+            return
+        svc.delete_group(g["id"])
+        print(f"\033[1;33m[group] deleted '{g['name']}' and its conversation\033[0m\n")
+        return
+    # /group <name> <message…> — longest group-name prefix wins, so names with
+    # spaces work without quoting
+    low = rest.lower()
+    match = None
+    for g in sorted(groups, key=lambda x: -len(x["name"])):
+        n = g["name"].lower()
+        if low == n or low.startswith(n + " "):
+            match = (g, rest[len(g["name"]):].strip())
+            break
+    if not match:
+        print(f"\033[1;31m[group] no group matches '{parts[0]}' — /group lists them\033[0m\n")
+        return
+    g, message = match
+    if not message:
+        print("\033[2m  say something: /group " + g["name"] + " <message> (mention @role to address one)\033[0m\n")
+        return
+    sess = svc.find_session(g.get("session", ""))
+    if not sess:
+        print("\033[1;31m[group] its conversation is missing — recreate the group\033[0m\n")
+        return
+    _consume_service_stream(svc, svc.stream_group_chat(sess, message))
+
+
+def auto_command(query: str) -> None:
+    """/auto — automations (trigger → prompt → actions). list · run · on · off."""
+    import agent_automations as auto
+    parts = query.split(None, 2)
+    sub = parts[1] if len(parts) > 1 else "list"
+    autos = auto.list_automations()
+    if sub == "list":
+        for a in autos:
+            trig = a.get("trigger") or {}
+            when = {"interval": f"every {trig.get('every_minutes')}m",
+                    "daily": f"daily {trig.get('at')}"}.get(trig.get("type"), trig.get("type", "manual"))
+            state = "running…" if a.get("running") else (when if a.get("enabled") else "off")
+            last = (a.get("last_run") or {}).get("status", "—")
+            print(f"  {a.get('icon', '⚡')} \033[1m{a['name']:<26}\033[0m \033[2m{state:<14} last: {last}\033[0m")
+        if not autos:
+            print("\033[2m  no automations yet — create them in the GUI (sidebar → Automations)\033[0m")
+        print("\033[2m  /auto run <name> · /auto on|off <name> — editing lives in the GUI\033[0m\n")
+        return
+    target = (parts[2] if len(parts) > 2 else "").strip().lower()
+    a = next((x for x in autos if x["name"].lower() == target or x["id"] == target), None)
+    if not a:
+        print(f"\033[1;31m[auto] no automation named '{target}' — /auto lists them\033[0m\n")
+        return
+    if sub == "run":
+        print(f"\033[2m  running '{a['name']}'…\033[0m")
+        run, err = auto.run_automation(a["id"])
+        if err:
+            print(f"\033[1;31m[auto] {err}\033[0m\n")
+        else:
+            print(f"\033[1;33m[auto] {run['status']}\033[0m\n{run['summary'][:1500]}\n")
+        return
+    if sub in ("on", "off"):
+        auto.update_automation(a["id"], {"enabled": sub == "on"})
+        print(f"\033[1;33m[auto] '{a['name']}' {'enabled' if sub == 'on' else 'disabled'}\033[0m\n")
+        return
+    print("\033[2m  /auto · /auto run <name> · /auto on|off <name>\033[0m\n")
+
+
+def models_command(query: str) -> None:
+    """/models [search] — the full OpenRouter catalog (same list as the GUI)."""
+    import agent_service as svc
+    q = query.split(None, 1)[1].strip().lower() if " " in query else ""
+    cat = svc.openrouter_catalog()
+    ids = [m["id"] for m in cat.get("models", [])]
+    if not ids:
+        print("\033[1;31m[models] catalog unavailable (offline and no cache yet)\033[0m\n")
+        return
+    hits = [m for m in ids if q in m.lower()] if q else ids
+    print(f"\033[2m  {cat.get('count', len(ids))} models on openrouter.ai"
+          + (f" · {len(hits)} match '{q}'" if q else "") + "\033[0m")
+    for m in hits[:25]:
+        print(f"  {m}")
+    if len(hits) > 25:
+        print(f"\033[2m  … +{len(hits) - 25} more — narrow with /models <search>\033[0m")
+    print("\033[2m  use one with /model <slug>\033[0m\n")
+
+
 HELP_TEXT = """\033[1mcommands\033[0m
   \033[1;36m/help\033[0m /h /?          \033[2mthis list\033[0m
   \033[1;36m/exit\033[0m /quit /q       \033[2mleave\033[0m
@@ -241,6 +387,11 @@ HELP_TEXT = """\033[1mcommands\033[0m
   \033[1;36m/team edit\033[0m <id> <name|icon|model|backend|prompt|skills|mcp> <value>
   \033[1;36m/team rm\033[0m <id>       \033[2mdelete an agent (asks about sessions)\033[0m
   \033[1;36m/team show\033[0m <id>     \033[2mone agent's full config\033[0m
+\033[1mgroups · automations\033[0m \033[2m(shared with the GUI)\033[0m
+  \033[1;36m/group\033[0m              \033[2mlist groups · /group <name> <msg> — every @role (or the mentioned ones) replies\033[0m
+  \033[1;36m/group add\033[0m <name> @role @role…   \033[2mcreate a group · /group rm <name>\033[0m
+  \033[1;36m/auto\033[0m               \033[2mlist automations · /auto run <name> · /auto on|off <name>\033[0m
+  \033[1;36m/models\033[0m [search]    \033[2mbrowse the full OpenRouter catalog · then /model <slug>\033[0m
 """
 
 
@@ -362,7 +513,7 @@ def run_interactive_chat(args: list):
                     else:
                         cur = os.environ.get("AI_BACKEND") or "auto (cascade)"
                         print(f"\033[1;33m[sys] Current backend: {cur}\033[0m")
-                        print(f"\033[2m[sys] Usage: /agent <{'|'.join(valid)}>  (local = your llama.cpp model, e.g. Hermes)\033[0m\n")
+                        print(f"\033[2m[sys] Usage: /agent <{'|'.join(valid)}>  (local = your llama.cpp model, e.g. Qwen3-4B)\033[0m\n")
                     continue
 
                 # --- PERSISTENT SETTINGS: /settings [key value] (settings.json) ---
@@ -500,6 +651,17 @@ def run_interactive_chat(args: list):
                     roles.team_command(query)
                 else:
                     roles.dispatch(query)
+                continue
+
+            # --- GUI features in the terminal: groups, automations, catalog ---
+            if query.split()[0] in ("/group", "/groups"):
+                group_command(query)
+                continue
+            if query.split()[0] in ("/auto", "/automation", "/automations"):
+                auto_command(query)
+                continue
+            if query.split()[0] == "/models":
+                models_command(query)
                 continue
 
             # --- PROJECT FOCUS: /project [name|path] — each project keeps its own
@@ -770,6 +932,16 @@ def run_direct_query(args: list):
     if query_parts and query_parts[0] == "/team":
         import agent_roles as roles
         roles.team_command(" ".join(query_parts))
+        sys.exit(0)
+    # One-shot group/automation/catalog: `ai /group Squad hello` · `ai /auto run x`
+    if query_parts and query_parts[0] in ("/group", "/groups"):
+        group_command(" ".join(query_parts))
+        sys.exit(0)
+    if query_parts and query_parts[0] in ("/auto", "/automation", "/automations"):
+        auto_command(" ".join(query_parts))
+        sys.exit(0)
+    if query_parts and query_parts[0] == "/models":
+        models_command(" ".join(query_parts))
         sys.exit(0)
     if query_parts and query_parts[0].startswith("@"):
         import agent_roles as roles

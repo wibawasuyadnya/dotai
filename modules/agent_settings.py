@@ -1,7 +1,7 @@
-# File: ~/.config/local-ai/modules/agent_settings.py
-"""Persistent user settings for DotAI, shared by the chat loop and modules.
+# File: ~/.config/orkesai/modules/agent_settings.py
+"""Persistent user settings for OrkesAI, shared by the chat loop and modules.
 
-Settings live in ~/.config/local-ai/settings.json and survive restarts —
+Settings live in ~/.config/orkesai/settings.json and survive restarts —
 the /settings command reads and writes them. Precedence for the startup
 backend: a real shell env var (AI_BACKEND=local ai) always wins, then
 settings.json, then .env, then the auto cascade.
@@ -15,7 +15,7 @@ import json
 import os
 import threading
 
-CFG_DIR = os.path.expanduser("~/.config/local-ai")
+CFG_DIR = os.path.expanduser("~/.config/orkesai")
 SETTINGS_FILE = os.path.join(CFG_DIR, "settings.json")
 _lock = threading.Lock()
 

@@ -1,4 +1,4 @@
-# File: ~/.config/local-ai/modules/agent_usage.py
+# File: ~/.config/orkesai/modules/agent_usage.py
 """Persistent per-model token/spend ledger shared by the main chat loop,
 the team agent service, and the /usage command.
 
@@ -14,7 +14,7 @@ import threading
 import time
 import urllib.request as urlreq
 
-CFG_DIR = os.path.expanduser("~/.config/local-ai")
+CFG_DIR = os.path.expanduser("~/.config/orkesai")
 USAGE_FILE = os.path.join(CFG_DIR, "projects", "database", "usage.json")
 _lock = threading.Lock()
 

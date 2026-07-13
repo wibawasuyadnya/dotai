@@ -1,4 +1,4 @@
-# Local-AI multi-agent stack for a VPS.
+# OrkesAI multi-agent stack for a VPS.
 #   cp .env.example .env   (set OPENROUTER_API_KEY, SITE_ADDRESS, GUI_USER, GUI_PASS_HASH)
 #   docker compose up -d --build
 # Caddy is the only exposed service; it serves the GUI and proxies /api to the
@@ -11,7 +11,7 @@ services:
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
     volumes:
-      - sessions:/root/.config/local-ai/.sessions
+      - sessions:/root/.config/orkesai/.sessions
     restart: unless-stopped
 
   gui:

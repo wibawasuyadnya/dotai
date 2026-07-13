@@ -52,7 +52,7 @@ Rather than treating OpenCode as an active, independent system that listens for 
 The project isolates runtime behaviors across modular blueprint files managed by a centralized configuration orchestrator:
 
 ```text
-~/.config/local-ai/tools/subsec/opencode-bridge/
+~/.config/orkesai/tools/subsec/opencode-bridge/
 ├── opencode-bridge      # The execution launcher script (ocb)
 ├── opencode.cloud.json  # Locked-down Gemini API cloud profile
 └── opencode.local.json  # Fast, toolless local inference profile

@@ -152,7 +152,7 @@ class VoiceHandler(http.server.SimpleHTTPRequestHandler):
                     sys.stderr.write(f"\033[1;30m❯\033[0m {query}\n")
                     sys.stderr.flush()
                     
-                    agent_script = os.path.expanduser("~/.config/local-ai/ai-agent.py")
+                    agent_script = os.path.expanduser("~/.config/orkesai/ai-agent.py")
                     # Directly execute your agent script
                     subprocess.Popen([sys.executable, agent_script, "--talk", query])
                     
@@ -202,7 +202,7 @@ with socketserver.TCPServer(("", PORT), VoiceHandler) as httpd:
     else:
         protocol = "http"
 
-    print(f"Local-AI Voice Bridge started on port {PORT}")
+    print(f"OrkesAI Voice Bridge started on port {PORT}")
     print(f"Connect your Tab S5e to Wi-Fi and visit:")
     print(f"{protocol}://{local_ip}:{PORT}")
 

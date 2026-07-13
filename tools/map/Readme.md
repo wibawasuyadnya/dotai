@@ -17,7 +17,7 @@ This subsystem maps your project's directory structure into a lightweight, high-
 
 ```text
 ~ ❯ index map
-[01/01] ❯ [index map] ~/.config/local-ai/tools/map/index-map
+[01/01] ❯ [index map] ~/.config/orkesai/tools/map/index-map
 :: ↵ run  Esc: 
 ```
 

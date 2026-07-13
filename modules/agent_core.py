@@ -1,4 +1,4 @@
-# File: ~/.config/local-ai/modules/agent_core.py
+# File: ~/.config/orkesai/modules/agent_core.py
 import os
 import sys
 import re
@@ -105,7 +105,7 @@ def stream(messages, prefix, gkey, spinner_class, show_stats: bool = True):
         spinner.start()
         with urlreq.urlopen(req, timeout=30) as response:
             try:
-                cfg_dir = os.path.expanduser("~/.config/local-ai")
+                cfg_dir = os.path.expanduser("~/.config/orkesai")
                 with open(os.path.join(cfg_dir, ".request_log"), "a", encoding="utf-8") as f:
                     f.write(f"{int(time.time())}|gemini-interactions\n")
             except Exception:
@@ -195,7 +195,10 @@ TOOLS_SYSTEM_ADD = (
     "shown to the user for y/n approval first, and the real output comes "
     "back to you as the tool result. Use the tools and report their actual "
     "output; never claim you are read-only or cannot access files, install "
-    "software, or run commands."
+    "software, or run commands. When the user asks to cat/show/print/see a "
+    "file or a command's output, reproduce the tool result COMPLETE and "
+    "VERBATIM in a fenced code block — never summarize, shorten or describe "
+    "it instead (summarize only when the user asks for a summary)."
 )
 
 READ_SYSTEM_ADD = (
@@ -247,7 +250,7 @@ TOOL_VERBS = {
 
 def claude_confirm_settings() -> str:
     """--settings JSON wiring the PreToolUse y/n gate into Claude Code."""
-    hook_cmd = f"python3 {os.path.expanduser('~/.config/local-ai')}/modules/ai-edit-confirm"
+    hook_cmd = f"python3 {os.path.expanduser('~/.config/orkesai')}/modules/ai-edit-confirm"
     return json.dumps({"hooks": {"PreToolUse": [{
         "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
         "hooks": [{"type": "command", "command": hook_cmd, "timeout": 600}],
@@ -617,7 +620,7 @@ def edit_turn_tools(messages, prefix, spinner, show_stats: bool = True) -> str o
     backend = os.environ.get("AI_BACKEND", "").strip().lower()
     if okey and backend != "local":
         url = "https://openrouter.ai/api/v1/chat/completions"
-        headers = {"Authorization": f"Bearer {okey}", "HTTP-Referer": "https://github.com/wibawasuyadnya/dotai"}
+        headers = {"Authorization": f"Bearer {okey}", "HTTP-Referer": "https://github.com/wibawasuyadnya/orkesai"}
         model = os.environ.get("OPENROUTER_MODEL", "openrouter/free")
     else:
         if not ensure_local_server():
@@ -707,7 +710,7 @@ def edit_turn_tools(messages, prefix, spinner, show_stats: bool = True) -> str o
 def ensure_local_server() -> bool:
     """Auto-start llama-server when the local backend is chosen but :8080 is down.
 
-    Launches start-hermes.sh detached (it keeps running after the agent exits,
+    Launches start-local.sh detached (it keeps running after the agent exits,
     so follow-up questions are instant) and waits for /health to report ready.
     llama-server answers 503 while the model is still loading, 200 once ready.
     """
@@ -721,10 +724,10 @@ def ensure_local_server() -> bool:
     if up():
         return True
 
-    cfg_dir = os.path.expanduser("~/.config/local-ai")
-    script = os.path.join(cfg_dir, "start-hermes.sh")
+    cfg_dir = os.path.expanduser("~/.config/orkesai")
+    script = os.path.join(cfg_dir, "start-local.sh")
     if not os.path.exists(script):
-        sys.stderr.write("\033[1;33m[sys] llama-server is not running and start-hermes.sh was not found — start it manually.\033[0m\n")
+        sys.stderr.write("\033[1;33m[sys] llama-server is not running and start-local.sh was not found — start it manually.\033[0m\n")
         return False
 
     import subprocess
@@ -761,7 +764,7 @@ def shutdown_local_server() -> None:
         return
     import signal
     import subprocess
-    cfg_dir = os.path.expanduser("~/.config/local-ai")
+    cfg_dir = os.path.expanduser("~/.config/orkesai")
     pid_file = os.path.join(cfg_dir, ".llama-server.pid")
     killed = False
     try:
@@ -839,7 +842,7 @@ def stream_response(messages: list, prefix: str = "AI: ", cfg_dir: str = "", sho
                 "https://openrouter.ai/api/v1/chat/completions",
                 {
                     "Authorization": f"Bearer {okey}",
-                    "HTTP-Referer": "https://github.com/wibawasuyadnya/dotai"
+                    "HTTP-Referer": "https://github.com/wibawasuyadnya/orkesai"
                 },
                 os.environ.get("OPENROUTER_MODEL", "openrouter/free"),
                 {"usage": {"include": True}},

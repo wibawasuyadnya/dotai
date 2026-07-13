@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
-# DotAI installer — terminal multi-agent AI
+# OrkesAI installer — terminal multi-agent AI
 #
-#   curl -fsSL https://raw.githubusercontent.com/wibawasuyadnya/dotai/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/wibawasuyadnya/orkesai/main/install.sh | bash
 #
 # What it does (idempotent — safe to re-run to update):
-#   1. Puts the app in ~/.config/local-ai (git clone, or copies from a local
+#   1. Puts the app in ~/.config/orkesai (git clone, or copies from a local
 #      source when invoked by the npm/brew wrappers with --local <dir>)
 #   2. Creates .env from .env.example if missing — YOUR keys, YOUR settings;
 #      never overwrites .env, settings.json, agents.json, projects/, sessions
 #   3. Ensures python3 + the one pip dependency (requests)
-#   4. Adds `source ~/.config/local-ai/ai-hook.sh` to your shell rc,
+#   4. Adds `source ~/.config/orkesai/ai-hook.sh` to your shell rc,
 #      which provides the `ai` command (and aic/aix/aio/ail/ais shortcuts)
 set -euo pipefail
 
-REPO="wibawasuyadnya/dotai"
-DIR="$HOME/.config/local-ai"
+REPO="wibawasuyadnya/orkesai"
+DIR="$HOME/.config/orkesai"
 SRC=""
 [ "${1:-}" = "--local" ] && SRC="${2:?usage: install.sh --local <srcdir>}"
 
-say()  { printf '\033[1;36m[dotai]\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m[dotai]\033[0m %s\n' "$*"; }
+say()  { printf '\033[1;36m[orkesai]\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m[orkesai]\033[0m %s\n' "$*"; }
 
-# ── 1. code → ~/.config/local-ai ────────────────────────────────────────────
+# ── 1. code → ~/.config/orkesai ────────────────────────────────────────────
 if [ -L "$DIR" ]; then
     say "dev install detected ($DIR is a symlink) — leaving code as-is"
 elif [ -d "$DIR/.git" ]; then
@@ -67,12 +67,12 @@ if ! python3 -c "import requests" >/dev/null 2>&1; then
 fi
 
 # ── 4. shell hook → the `ai` command ─────────────────────────────────────────
-HOOK_LINE="source \"\$HOME/.config/local-ai/ai-hook.sh\""
+HOOK_LINE="source \"\$HOME/.config/orkesai/ai-hook.sh\""
 added=""
 for rc in "$HOME/.zshrc" "$HOME/.bashrc"; do
     [ -f "$rc" ] || continue
-    if ! grep -Fq "local-ai/ai-hook.sh" "$rc"; then
-        printf '\n# DotAI terminal agent\n%s\n' "$HOOK_LINE" >> "$rc"
+    if ! grep -Fq "orkesai/ai-hook.sh" "$rc"; then
+        printf '\n# OrkesAI terminal agent\n%s\n' "$HOOK_LINE" >> "$rc"
         added="$added $(basename "$rc")"
     fi
 done
@@ -80,4 +80,4 @@ done
 
 say "done — open a NEW terminal (or: source ~/.zshrc) and type: ai"
 say "backends: edit $DIR/.env — OpenRouter key, or install the claude/codex CLIs,"
-say "or none at all: the local Hermes model auto-downloads on first use (~1 GB)."
+say "or none at all: the local Qwen3-4B model auto-downloads on first use (~2.5 GB)."

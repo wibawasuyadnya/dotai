@@ -1,5 +1,5 @@
-# File: ~/.config/local-ai/modules/agent_roles.py
-"""Terminal dispatch for the role agents in agents.json (DotAI).
+# File: ~/.config/orkesai/modules/agent_roles.py
+"""Terminal dispatch for the role agents in agents.json (OrkesAI).
 
 The user is the orchestrator: inside `ai` (or as a one-shot), messages like
 

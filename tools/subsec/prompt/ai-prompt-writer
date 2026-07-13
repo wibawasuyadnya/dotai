@@ -17,7 +17,7 @@ try:
 except ImportError:
     pass
 
-CFG_DIR = os.path.expanduser("~/.config/local-ai")
+CFG_DIR = os.path.expanduser("~/.config/orkesai")
 API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
 MODEL = os.environ.get("CLOUD_MODEL", "gemini-1.5-flash")
 
@@ -145,7 +145,7 @@ def call_service(messages):
         configs.append(("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {"Authorization": f"Bearer {gkey}"}, target_model, {}, 15))
     if okey:
         m = os.environ.get("OPENROUTER_MODEL", "openrouter/free")
-        configs.append(("https://openrouter.ai/api/v1/chat/completions", {"Authorization": f"Bearer {okey}", "HTTP-Referer": "https://github.com/suyadnya/local-ai"}, m, {}, 20))
+        configs.append(("https://openrouter.ai/api/v1/chat/completions", {"Authorization": f"Bearer {okey}", "HTTP-Referer": "https://github.com/suyadnya/orkesai"}, m, {}, 20))
     if ckey and curl: 
         configs.append((curl, {"Authorization": f"Bearer {ckey}"}, os.environ.get("CLOUD_MODEL"), {}, 30))
     configs.append(("http://localhost:8080/v1/chat/completions", {}, "local-model", {}, 180))

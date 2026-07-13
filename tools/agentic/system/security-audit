@@ -3,8 +3,8 @@
 
 set -euo pipefail
 
-PRINT_MYSYS_BIN="$HOME/.config/local-ai/tools/agentic/system/print-mysys"
-SECAUD_FILE="$HOME/.config/local-ai/skills/system/security-audit.md"
+PRINT_MYSYS_BIN="$HOME/.config/orkesai/tools/agentic/system/print-mysys"
+SECAUD_FILE="$HOME/.config/orkesai/skills/system/security-audit.md"
 
 # 1. Print General System Profile with dynamic title override
 if [ -f "$PRINT_MYSYS_BIN" ]; then

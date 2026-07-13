@@ -1,4 +1,4 @@
-# Local-AI Tablet Voice Bridge
+# OrkesAI Tablet Voice Bridge
 
 <div align="center">
 <img alt="Image_eva8fveva8fveva8" src="https://github.com/user-attachments/assets/9722a863-ca27-4ac4-9203-90fd5e682c7c" width="800" />
@@ -6,29 +6,29 @@
 
 ---
 
-A zero-daemon, model-free voice-to-text pipeline that integrates any tablet (or phone) with your local-ai agent. It uses the browser-native HTML5 MediaRecorder API on the tablet to record audio, uploads it over local Wi-Fi, and transcribes it using your Gemini key (0% idle PC CPU, 0MB local models).
+A zero-daemon, model-free voice-to-text pipeline that integrates any tablet (or phone) with your orkesai agent. It uses the browser-native HTML5 MediaRecorder API on the tablet to record audio, uploads it over local Wi-Fi, and transcribes it using your Gemini key (0% idle PC CPU, 0MB local models).
 
 ---
 
 ## 1. Save and Configure the Script
 
 Save your voice-query Python script to:
-`$HOME/.config/local-ai/tools/subsec/voice/voice-query`
+`$HOME/.config/orkesai/tools/subsec/voice/voice-query`
 
 Make the script executable:
 ```bash
-chmod +x $HOME/.config/local-ai/tools/subsec/voice/voice-query
+chmod +x $HOME/.config/orkesai/tools/subsec/voice/voice-query
 ```
 
 ---
 
 ## 2. Register the Shortcut
 
-Add this line to Section 4 of your `~/.config/local-ai/ai-context.txt`:
+Add this line to Section 4 of your `~/.config/orkesai/ai-context.txt`:
 
 ```text
 # --- Local-Ai Tablet Voice Bridge ---
-$HOME/.config/local-ai/tools/subsec/voice/voice-query ---> voice, voice query, voice bridge
+$HOME/.config/orkesai/tools/subsec/voice/voice-query ---> voice, voice query, voice bridge
 ```
 
 ---

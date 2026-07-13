@@ -86,7 +86,7 @@ fi
 stop_spinner
 
 # 5. Output AI Instructions and Raw Metrics to stdout
-SKILL_FILE="$HOME/.config/local-ai/skills/system/update-inspector.md"
+SKILL_FILE="$HOME/.config/orkesai/skills/system/update-inspector.md"
 if [ -f "$SKILL_FILE" ]; then
     cat "$SKILL_FILE"
     echo ""

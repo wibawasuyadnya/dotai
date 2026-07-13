@@ -1,4 +1,4 @@
-# File: ~/.config/local-ai/modules/agent_context.py
+# File: ~/.config/orkesai/modules/agent_context.py
 import os
 import re
 import fnmatch
