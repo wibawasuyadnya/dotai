@@ -21,6 +21,8 @@
 - **Opencode-style terminal UI** — composer pinned to the bottom, shaded user-message blocks, per-turn model/token/cost statusline — in your plain terminal, no TUI
 - **Unlimited local agents** — every folder can become a persistent, codebase-aware agent with its own memory, history, and personality (skill)
 - **Zero idle cost** — no daemon; nothing runs until you type `ai`, and exiting the chat also stops the auto-started local llama-server (set `AI_KEEP_LOCAL=1` to keep it warm across sessions)
+- **Opt-in learning loop** — flip one switch and OrkesAI keeps a user profile (`PROFILE.md`), distills completed tool work into reusable skills attached to the @role that did it, and records corrections in `.learnings/` — all plain files you can open, edit or delete. No model weights change, ever
+- **Drop-in skills** — copy a Claude Code skill folder (`<name>/SKILL.md`) or a Codex prompt file into `skills/custom/` and any agent can use it (OrkesAI never reads `~/.claude` or `~/.codex` itself)
 - **Persistent memory** — per-workspace SQLite session history + long-term fact memory (TPM)
 - **Terminal-native UX** — streaming output, spellcheck, token meters, session snapshots/rollback
 

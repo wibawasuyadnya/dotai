@@ -408,7 +408,18 @@ def run_interactive_chat(args: list):
     
     skill_content = skills.load_skill_content(" ".join(skills_list), SKILLS_DIR, CFG_DIR)
     active_system_prompt = skill_content if (is_agent and skill_content) else (BASE_PROMPT + (f"\n\n### Active Skill/Role Instructions:\n{skill_content}\n" if skill_content else ""))
-    
+
+    # Opt-in learning: the learned user profile (PROFILE.md, shared with the
+    # GUI) rides along read-only so the terminal knows you too
+    try:
+        import agent_service as _svc
+        if _svc.learning_on():
+            _prof = _svc.read_profile()
+            if _prof:
+                active_system_prompt += "\n\n### User profile (learned, PROFILE.md):\n" + _prof[:2500]
+    except Exception:
+        pass
+
     workspace_path = os.environ.get("AI_WORKSPACE_PATH", os.getcwd())
     home_dir = os.path.expanduser("~")
     safe_name = workspace_safe_name(workspace_path, home_dir)

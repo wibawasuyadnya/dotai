@@ -33,6 +33,19 @@ const TEMPLATES: { label: string; data: Partial<Automation> }[] = [
     },
   },
   {
+    label: "Self-review (heartbeat)",
+    data: {
+      name: "Self-review", icon: "🪞",
+      trigger: { type: "daily", at: "18:00" },
+      prompt:
+        "Read ~/.config/orkesai/.learnings/learnings.md and ~/.config/orkesai/PROFILE.md (use read_file; " +
+        "if a file is missing, say so and continue). Review the recent corrections and failures: what patterns " +
+        "keep repeating? Report the 3 most important behavioral improvements for the team, plus any profile " +
+        "updates you would recommend. Be specific and short.",
+      actions: { webhook_url: "", save_note: true },
+    },
+  },
+  {
     label: "Repo → Obsidian notes",
     data: {
       name: "Repo to Obsidian", icon: "💎",
@@ -164,6 +177,7 @@ function AutomationEditor({
     setTrigType(t.trigger?.type ?? "manual");
     if (t.trigger?.every_minutes) setEveryMin(t.trigger.every_minutes);
     if (t.trigger?.at) setDailyAt(t.trigger.at);
+    if (t.actions) { setWebhookUrl(t.actions.webhook_url ?? ""); setSaveNote(!!t.actions.save_note); }
   }
 
   function payload(): Partial<Automation> {

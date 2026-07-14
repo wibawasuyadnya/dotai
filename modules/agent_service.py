@@ -17,7 +17,15 @@ import urllib.request as urlreq
 import urllib.error as urlerr
 
 CFG_DIR = os.path.join(os.path.expanduser("~"), ".config", "orkesai")
-sys.path.insert(0, os.path.join(CFG_DIR, "modules"))
+# Sibling modules must come from the SAME tree as this file (a dev checkout
+# would otherwise be shadowed by the installed copy in ~/.config); the config
+# dir is only a fallback for embedded/odd launch contexts.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+_CFG_MODULES = os.path.join(CFG_DIR, "modules")
+if _CFG_MODULES not in (sys.path[0], _HERE) and _CFG_MODULES not in sys.path:
+    sys.path.append(_CFG_MODULES)
 
 from agent_core import (extract_stream_content, edit_mode_on, edit_confirm_on,
                         claude_confirm_settings, EDIT_SYSTEM_ADD, READ_SYSTEM_ADD)  # noqa: E402
@@ -378,6 +386,8 @@ def gui_settings() -> dict:
         "full_disk": bool(data.get("full_disk", False)),
         # first-run setup wizard completed? (fresh installs ship NO roles)
         "onboarded": bool(data.get("onboarded", False)),
+        # opt-in write-back learning: PROFILE.md, auto-skills, .learnings/
+        "learning": bool(data.get("learning", False)),
     }
 
 
@@ -420,6 +430,8 @@ def save_gui_settings(data: dict) -> str:
         agent_settings.set("full_disk", bool(data["full_disk"]))
     if "onboarded" in data:
         agent_settings.set("onboarded", bool(data["onboarded"]))
+    if "learning" in data:
+        agent_settings.set("learning", bool(data["learning"]))
     # Take effect now (edit mode / startup backend), same precedence as startup
     agent_settings.apply_startup(_REAL_ENV_BACKEND, _REAL_ENV_EDIT)
     return ""
@@ -1259,7 +1271,8 @@ def list_skills() -> list:
             if path and os.path.isfile(path):
                 try:
                     ok = os.path.getsize(path) > 0
-                    detail = "installed" if ok else "empty file"
+                    src = "claude-code skill" if os.path.basename(path) == "SKILL.md" else "installed"
+                    detail = src if ok else "empty file"
                 except Exception:
                     detail = "unreadable"
             out.append({"name": n, "category": cat, "ok": ok, "detail": detail})
@@ -1580,6 +1593,165 @@ def context_view(agent_id: str, session_id: str) -> dict:
     links = list(d["links"]) + _auto_links(agent_id, "" if is_role else session_id)
     return {"scope": scope, "is_role": is_role, "files": files,
             "notes": d["notes"], "links": links, "ai_auto": d["ai_auto"]}
+
+
+# ── Learning loop (opt-in): profile memory · auto-skills · learnings ─────────
+# No model weights ever change — "learning" is a write-back loop of plain,
+# user-visible files that get injected into future prompts:
+#   PROFILE.md               who the user is (style, preferences, goals)
+#   skills/custom/auto-*.md  reusable skill docs distilled from real tool work
+#   .learnings/learnings.md  corrections & failures to avoid repeating
+# Everything is off until Settings → "Let OrkesAI learn from you" is enabled,
+# and the user can open, edit or delete any of it.
+
+PROFILE_FILE = os.path.join(CFG_DIR, "PROFILE.md")
+LEARNINGS_FILE = os.path.join(CFG_DIR, ".learnings", "learnings.md")
+_AUTOSKILL_DIR = os.path.join(CFG_DIR, "skills", "custom")
+
+
+def learning_on() -> bool:
+    import agent_settings
+    return bool(agent_settings.get("learning", False))
+
+
+def _flash(prompt: str, max_tokens: int = 500) -> str:
+    """One cheap OpenRouter call (same model the notes summarizer uses).
+    Returns the text, or "" on any failure — learning must never break chat."""
+    okey = os.environ.get("OPENROUTER_API_KEY")
+    if not okey:
+        return ""
+    body = {"model": "deepseek/deepseek-v4-flash",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens, "temperature": 0.3}
+    try:
+        req = urlreq.Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json",
+                     "Authorization": f"Bearer {okey}",
+                     "HTTP-Referer": "https://github.com/wibawasuyadnya/orkesai"},
+            method="POST")
+        with urlreq.urlopen(req, timeout=45) as r:
+            resp = json.loads(r.read().decode("utf-8"))
+        return (((resp.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+    except Exception:
+        return ""
+
+
+def read_profile() -> str:
+    try:
+        with open(PROFILE_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except Exception:
+        return ""
+
+
+def _record_learning(kind: str, text: str) -> None:
+    """Append one correction/failure line; the file keeps only the last 100."""
+    if not learning_on():
+        return
+    try:
+        os.makedirs(os.path.dirname(LEARNINGS_FILE), exist_ok=True)
+        stamp = time.strftime("%Y-%m-%d %H:%M")
+        line = f"- [{stamp}] {kind}: " + " ".join(str(text or "").split())[:300]
+        lines = []
+        try:
+            with open(LEARNINGS_FILE, "r", encoding="utf-8") as f:
+                lines = [l for l in f.read().splitlines() if l.strip()]
+        except Exception:
+            pass
+        lines.append(line)
+        with open(LEARNINGS_FILE, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines[-100:]) + "\n")
+    except Exception:
+        pass
+
+
+def recent_learnings(n: int = 8) -> list:
+    try:
+        with open(LEARNINGS_FILE, "r", encoding="utf-8") as f:
+            lines = [l for l in f.read().splitlines() if l.strip().startswith("-")]
+        return lines[-n:]
+    except Exception:
+        return []
+
+
+def _update_profile(user_text: str, answer: str) -> None:
+    current = read_profile()
+    out = _flash(
+        "You maintain a short PROFILE of the user for their personal AI. Update it with anything "
+        "DURABLE from this exchange: communication style, preferences (language, format, tone), "
+        "goals, recurring context, corrections they gave. Keep everything already there that is "
+        "still true. Under 220 words, markdown bullets grouped as '## Style', '## Preferences', "
+        "'## Goals & context'. If this exchange adds nothing durable, reply exactly NOCHANGE.\n\n"
+        "### Current profile:\n" + (current or "(empty)")
+        + f"\n\n### Exchange:\nuser: {user_text[:2000]}\nassistant: {answer[:2000]}\n\n### Updated profile:")
+    if not out or out[:20].strip().upper().startswith("NOCHANGE"):
+        return
+    try:
+        with open(PROFILE_FILE, "w", encoding="utf-8") as f:
+            f.write(out.strip() + "\n")
+    except Exception:
+        pass
+
+
+def _existing_autoskills() -> list:
+    try:
+        return sorted(f[:-3] for f in os.listdir(_AUTOSKILL_DIR)
+                      if f.startswith("auto-") and f.endswith(".md"))
+    except Exception:
+        return []
+
+
+def _maybe_autoskill(role_id: str, user_text: str, answer: str) -> None:
+    """Tool-heavy successful turn → distill a reusable skill doc; attach it to
+    the @role that earned it (per-role learning). The model may decline (SKIP)."""
+    tool_lines = [l for l in answer.splitlines() if l.startswith("∗ ")]
+    if len(tool_lines) < 3 or "[error]" in answer:
+        return
+    existing = ", ".join(_existing_autoskills())[:400]
+    out = _flash(
+        "Decide if this completed task is a REPEATABLE workflow worth a reusable skill document "
+        "for next time. One-off trivia or plain conversation is not. If not worth it, reply "
+        "exactly SKIP. If yes: first line 'TITLE: <short workflow name>', then a markdown skill "
+        "doc with '## When to use', '## Steps' (the concrete commands/files that actually "
+        "worked), '## Gotchas'. Base it ONLY on what actually happened."
+        + (f"\nExisting auto-skills: {existing}. Reuse an existing TITLE if this is the same "
+           "workflow (it will be updated)." if existing else "")
+        + f"\n\n### Task:\n{user_text[:1500]}\n\n### What the assistant did:\n{answer[:5000]}\n\n### Skill:",
+        max_tokens=700)
+    if not out or out[:10].strip().upper().startswith("SKIP"):
+        return
+    first, _, body = out.partition("\n")
+    if not first.strip().lower().startswith("title:"):
+        return
+    title = first.split(":", 1)[1].strip()[:60]
+    slug = "auto-" + (re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:50] or "skill")
+    try:
+        os.makedirs(_AUTOSKILL_DIR, exist_ok=True)
+        with open(os.path.join(_AUTOSKILL_DIR, slug + ".md"), "w", encoding="utf-8") as f:
+            f.write(f"# {title}\n\n_Learned automatically from a completed task — edit freely._\n\n"
+                    + body.strip() + "\n")
+    except Exception:
+        return
+    if role_id and role_id != DEFAULT_AGENT_ID:
+        agents = list_agents()
+        for a in agents:
+            if a["id"] == role_id:
+                sk = list(a.get("skills") or [])
+                if slug not in sk:
+                    a["skills"] = sk + [slug]
+                    save_agents(agents)
+                break
+
+
+def _learn_from_turn(role_id: str, user_text: str, answer: str) -> None:
+    """Post-turn write-back (daemon thread; failures stay silent)."""
+    try:
+        _update_profile(user_text, answer)
+        _maybe_autoskill(role_id, user_text, answer)
+    except Exception:
+        pass
 
 
 def summarize_to_note(agent_id: str, session_id: str, source: str = "ai", mode: str = "summary"):
@@ -2262,12 +2434,17 @@ def stream_chat(session: dict, user_text: str, images: list = None,
             pass
     system_prompt = base_system + STYLE_SYSTEM_ADD
     # Optional "skills": ["caveman", ...] — skill file bodies join the prompt
+    # (includes auto-learned skills and dropped-in Claude Code SKILL.md folders)
     for sk in agent.get("skills") or []:
         path = find_skill_file(os.path.join(CFG_DIR, "skills"), sk)
         if path:
             try:
                 with open(path, "r", encoding="utf-8") as f:
-                    system_prompt += "\n\n" + f.read().strip()
+                    body = f.read().strip()
+                if os.path.basename(path) == "SKILL.md":
+                    import agent_skills as _ask
+                    body = _ask._strip_frontmatter(body).strip()
+                system_prompt += "\n\n" + body
             except Exception:
                 pass
     # Project instructions (Claude-style "custom instructions") join the prompt
@@ -2320,6 +2497,18 @@ def stream_chat(session: dict, user_text: str, images: list = None,
                               "(saved notes can then be exported as PDF, DOCX, XLSX or CSV).")
     except Exception:
         pass
+
+    # Learned context (opt-in): the user profile + recent corrections. Plain
+    # files the user can open/edit/delete (PROFILE.md, .learnings/).
+    if learning_on():
+        _prof = read_profile()
+        if _prof:
+            system_prompt += ("\n\n### User profile (learned over time; the user can edit "
+                              "PROFILE.md):\n" + _prof[:2500])
+        _lrn = recent_learnings()
+        if _lrn:
+            system_prompt += ("\n\n### Recent corrections & failures — do not repeat these:\n"
+                              + "\n".join(_lrn))
 
     # @role handoff: if the message names another teammate, pull their latest
     # exchange in as context so 'review @debug's warnings' just works.
@@ -2596,8 +2785,12 @@ def stream_chat(session: dict, user_text: str, images: list = None,
                             yield {"type": "confirm", "id": cid, "tool": fname,
                                    "action": action, "detail": detail}
                             approved = _wait_confirm(cid)
+                        if not approved:
+                            # self-correction memory: a denial is a correction
+                            _record_learning("user denied", action)
                         result = _exec_tool(fname, args, workspace) if approved else DENIED
                     except Exception as e:
+                        _record_learning("tool error", f"{fname}: {e}")
                         result = f"[tool error] {e}"
                 else:
                     srv, _, tool = fname.partition("__")
@@ -2754,6 +2947,13 @@ def stream_chat(session: dict, user_text: str, images: list = None,
             summarize_to_note(session["agent"], session["id"], source="ai-auto", mode="content")
     except Exception:
         pass
+    # Learning loop (opt-in): profile update + auto-skill distillation run on a
+    # daemon thread so the done event is never delayed. Synthetic group cues
+    # (save_user=False) are skipped — they are not the user's words.
+    if learning_on() and save_user:
+        threading.Thread(target=_learn_from_turn,
+                         args=(as_role or session["agent"], user_text, answer),
+                         daemon=True).start()
     yield {"type": "done", "usage": session["usage"], "title": session["title"],
            "cost": usage.get("cost", 0)}
 

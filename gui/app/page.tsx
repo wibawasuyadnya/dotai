@@ -147,6 +147,7 @@ export default function Home() {
     agent: "auto", edit: "on", spellcheck: true, default_agent: DEFAULT_AGENT,
     default_backend: "openrouter", default_model: "", default_system: "", appearance: "dark", full_disk: false,
     onboarded: true, // real value arrives with getSettings — avoids a splash flash
+    learning: false,
   });
 
   const [active, setActive] = useState<Session | null>(null);

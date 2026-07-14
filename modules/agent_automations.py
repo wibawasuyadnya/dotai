@@ -251,6 +251,12 @@ def run_automation(aid: str, payload: str = ""):
                                 source="automation")
             except Exception:
                 pass
+        if status == "error":
+            # feed failures into the (opt-in) learning loop — no-op when off
+            try:
+                svc._record_learning("automation failed", f"'{a['name']}': {output[:250]}")
+            except Exception:
+                pass
         _record_run(aid, status, output)
         return {"status": status, "summary": output[:2000], "session": sess["id"]}, ""
     except Exception as e:

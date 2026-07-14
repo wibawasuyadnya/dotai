@@ -177,6 +177,20 @@ function GeneralPane({
         <input type="checkbox" className="toggle" checked={s.spellcheck} onChange={(e) => patch({ spellcheck: e.target.checked })} />
       </label>
 
+      <label className="setting-row">
+        <span>
+          <div className="setting-label">Let OrkesAI learn from you</div>
+          <div className="setting-help">
+            Opt-in write-back memory: keeps a user profile (<code>PROFILE.md</code>), turns completed
+            tool work into reusable skills (<code>skills/custom/auto-*</code>) attached to the @role that
+            did it, and records corrections &amp; failures (<code>.learnings/</code>). Everything is a plain
+            file in <code>~/.config/orkesai</code> you can open, edit or delete. Uses one cheap model
+            call after each turn while on.
+          </div>
+        </span>
+        <input type="checkbox" className="toggle" checked={s.learning} onChange={(e) => patch({ learning: e.target.checked })} />
+      </label>
+
       <div className="setting-block">
         <div className="setting-label">New session with</div>
         <div className="two-col">

@@ -87,6 +87,7 @@ export interface Settings {
   appearance: string; // dark|light|system
   full_disk: boolean;
   onboarded: boolean; // first-run setup wizard completed
+  learning: boolean; // opt-in write-back learning (PROFILE.md, auto-skills, learnings)
 }
 
 export interface Project {

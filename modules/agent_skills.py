@@ -17,12 +17,20 @@ def ensure_mysys_exists(skills_dir: str, cfg_dir: str) -> None:
             pass
 
 def find_skill_file(base_dir: str, skill_name: str) -> str or None:
-    target_filename = f"{skill_name.lower()}.md"
-    for root, _, files in os.walk(base_dir):
+    """Resolve a skill by name. Two shapes are understood:
+      <anywhere>/<name>.md              native / Codex-style prompt file
+      <anywhere>/<name>/SKILL.md        Claude Code skill folder, dropped in
+                                        by the user (we never read ~/.claude)"""
+    name = skill_name.lower()
+    target_filename = f"{name}.md"
+    for root, dirs, files in os.walk(base_dir):
         if root[len(base_dir):].count(os.sep) <= 3:
             for f in files:
                 if f.lower() == target_filename:
                     return os.path.join(root, f)
+            for d in dirs:
+                if d.lower() == name and os.path.isfile(os.path.join(root, d, "SKILL.md")):
+                    return os.path.join(root, d, "SKILL.md")
     return None
 
 def load_skill_content(skills_str: str, skills_dir: str, cfg_dir: str) -> str:
@@ -36,7 +44,12 @@ def load_skill_content(skills_str: str, skills_dir: str, cfg_dir: str) -> str:
                 ensure_mysys_exists(skills_dir, cfg_dir)
             try:
                 with open(skill_file, "r", encoding="utf-8") as f:
-                    contents.append(f.read().strip())
+                    text = f.read().strip()
+                # Claude Code SKILL.md carries YAML frontmatter (name,
+                # description) meant for its loader, not for the prompt
+                if os.path.basename(skill_file) == "SKILL.md":
+                    text = _strip_frontmatter(text).strip()
+                contents.append(text)
             except Exception as e:
                 sys.stderr.write(f"\033[1;31mError loading skill '{skill}': {e}\033[0m\n")
     return "\n\n".join(contents)
@@ -95,12 +108,15 @@ def remove_skill(name: str, skills_dir: str) -> bool:
 
 
 def list_skills(skills_dir: str) -> dict:
-    """{category: [skill names]} for every .md under skills/."""
+    """{category: [skill names]} for every .md under skills/, plus dropped-in
+    Claude Code skill FOLDERS (<name>/SKILL.md) named after their folder."""
     out = {}
-    for root, _, files in os.walk(skills_dir):
+    for root, dirs, files in os.walk(skills_dir):
         rel = os.path.relpath(root, skills_dir)
         cat = rel.split(os.sep)[0] if rel != "." else ""
-        names = sorted(f[:-3] for f in files if f.endswith(".md"))
+        names = sorted(f[:-3] for f in files if f.endswith(".md") and f != "SKILL.md")
+        names += sorted(d for d in dirs
+                        if os.path.isfile(os.path.join(root, d, "SKILL.md")))
         if names:
             out.setdefault(cat or "(root)", []).extend(names)
     return out
