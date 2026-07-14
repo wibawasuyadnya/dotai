@@ -60,8 +60,18 @@ def _db() -> sqlite3.Connection:
             _fts_ok = True
         except sqlite3.OperationalError:
             _fts_ok = False  # python built without FTS5 → LIKE fallback
+        conn.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT)")
         conn.commit()
         _conn = conn
+    # one-time: absorb the terminal's legacy TPM facts into the brain
+    try:
+        done = conn.execute("SELECT value FROM meta WHERE key='tpm_migrated'").fetchone()
+        if not done:
+            conn.execute("INSERT OR REPLACE INTO meta VALUES ('tpm_migrated', '1')")
+            conn.commit()
+            migrate_legacy_tpm()
+    except Exception:
+        pass
     return _conn
 
 
@@ -243,34 +253,33 @@ def stats() -> dict:
     return {"total": total, "by_scope": by_scope, "fts": _fts_ok, "file": DB_FILE}
 
 
-def migrate_legacy_tpm() -> int:
-    """One-time best effort: pull facts out of the terminal's old per-workspace
-    TPM stores (and tpm.md files) into the shared brain, scoped per project."""
-    imported = 0
-    roots = [os.path.join(CFG_DIR, "projects", "database")]
+def migrate_legacy_tpm(roots: list = None) -> int:
+    """Pull facts out of the terminal's old per-workspace TPM stores
+    (tpm_memories key/value tables) into the shared brain, one memory per fact
+    as 'key: value', scoped per legacy workspace. Safe to re-run — duplicate
+    bodies collapse. Runs automatically ONCE when the brain is first created."""
+    roots = roots or [os.path.join(CFG_DIR, "projects", "database")]
+    before = _db().execute("SELECT COUNT(*) FROM memories").fetchone()[0]
     for root in roots:
         if not os.path.isdir(root):
             continue
-        for name in os.listdir(root):
+        for name in sorted(os.listdir(root)):
             if not name.endswith((".db", ".sqlite")):
                 continue
             try:
-                old = sqlite3.connect(os.path.join(root, name))
-                tables = [r[0] for r in old.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'")]
-                for t in tables:
-                    if "mem" not in t.lower() and "fact" not in t.lower() and "tpm" not in t.lower():
+                old = sqlite3.connect(f"file:{os.path.join(root, name)}?mode=ro", uri=True)
+                try:
+                    rows = old.execute("SELECT key, value FROM tpm_memories").fetchall()
+                except sqlite3.OperationalError:
+                    rows = []
+                scope = f"project:{name.rsplit('.', 1)[0]}"
+                for key, value in rows:
+                    key, value = str(key or "").strip(), str(value or "").strip()
+                    if not value:
                         continue
-                    cols = [c[1] for c in old.execute(f"PRAGMA table_info({t})")]
-                    body_col = next((c for c in cols if c in ("fact", "content", "body", "text", "value")), None)
-                    if not body_col:
-                        continue
-                    for (body,) in old.execute(f"SELECT {body_col} FROM {t}"):
-                        if body and str(body).strip():
-                            m, _ = add_memory(str(body), scope=f"project:{name.rsplit('.', 1)[0]}",
-                                              kind="fact", source="tpm-migration")
-                            imported += 1 if m else 0
+                    body = f"{key}: {value}" if key else value
+                    add_memory(body, scope=scope, kind="fact", source="tpm-migration")
                 old.close()
             except Exception:
                 continue
-    return imported
+    return _db().execute("SELECT COUNT(*) FROM memories").fetchone()[0] - before

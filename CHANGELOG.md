@@ -5,6 +5,11 @@ the downloadable installers.
 
 ## Unreleased
 
+- Legacy terminal TPM facts migrate into the shared brain automatically
+  (once, on first open — 'key: value' facts, scoped per old workspace);
+  the Databases pane now shows `.memory.db` with per-scope counts, and
+  deleting it wipes the brain's contents without breaking the store.
+
 - **One shared memory — one brain for GUI and terminal** (`.memory.db`,
   SQLite + FTS5, stdlib only). What one frontend learns, the other knows.
   Every memory is scoped (everywhere / per-@role / per-project), typed

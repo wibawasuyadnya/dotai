@@ -1346,10 +1346,21 @@ def remove_mcp(name: str):
 
 
 def list_databases() -> list:
-    """The SQLite files under projects/database, with size and row counts."""
+    """The SQLite files under projects/database, with size and row counts —
+    plus the shared memory brain (.memory.db)."""
     import sqlite3
     ddir = os.path.join(CFG_DIR, "projects", "database")
     out = []
+    # the ONE shared memory (browse/edit its contents in Settings → Memory)
+    try:
+        import agent_memory
+        if os.path.isfile(agent_memory.DB_FILE):
+            st = agent_memory.stats()
+            out.append({"name": ".memory.db", "size": os.path.getsize(agent_memory.DB_FILE),
+                        "kind": "memory",
+                        "tables": [{"table": sc, "rows": n} for sc, n in sorted(st["by_scope"].items())]})
+    except Exception:
+        pass
     try:
         names = sorted(os.listdir(ddir))
     except Exception:
@@ -1920,6 +1931,18 @@ def delete_database(name: str):
     safe = os.path.basename(str(name or "")).strip()
     if not safe:
         return False, "name is required"
+    if safe == ".memory.db":
+        # wipe the shared brain: drop every memory but keep the store usable
+        import agent_memory
+        conn = agent_memory._db()
+        with agent_memory._lock:
+            conn.execute("DELETE FROM memories")
+            try:
+                conn.execute("DELETE FROM memories_fts")
+            except Exception:
+                pass
+            conn.commit()
+        return True, ""
     ddir = os.path.join(CFG_DIR, "projects", "database")
     target = os.path.join(ddir, safe)
     if os.path.dirname(os.path.abspath(target)) != os.path.abspath(ddir) or not os.path.isfile(target):
