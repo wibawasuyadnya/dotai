@@ -3,6 +3,13 @@
 Every release and what it brought. Versions link to the GitHub release with
 the downloadable installers.
 
+## Unreleased
+
+- **Automations get a working folder** ("Works in folder"): commands run
+  there and the agent may create/update files INSIDE it without asking —
+  writes outside it and destructive shell stay denied. Enables recipes like
+  "GitLab push webhook → task-titled document in my Obsidian vault".
+
 ## [v0.13.0](https://github.com/wibawasuyadnya/orkesai/releases/tag/v0.13.0) — 2026-07-14
 
 **OrkesAI learns (opt-in) + drop-in skills.**

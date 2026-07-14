@@ -69,6 +69,9 @@ def _normalize(data: dict, base: dict = None) -> tuple:
     for k in ("backend", "model"):
         if k in data:
             a[k] = str(data.get(k) or "").strip()
+    if "project" in data:
+        # the automation's working folder — file writes are allowed INSIDE it
+        a["project"] = os.path.expanduser(str(data.get("project") or "").strip())
     if "actions" in data:
         act = data.get("actions") or {}
         a["actions"] = {"webhook_url": str(act.get("webhook_url") or "").strip()[:2000],
@@ -100,6 +103,7 @@ def _normalize(data: dict, base: dict = None) -> tuple:
     a.setdefault("agent", "")
     a.setdefault("backend", "")
     a.setdefault("model", "")
+    a.setdefault("project", "")
     a.setdefault("actions", {"webhook_url": "", "save_note": False})
     a["updated"] = int(time.time())
     return a, ""
@@ -211,8 +215,13 @@ def run_automation(aid: str, payload: str = ""):
             if agent_id != "default" and not any(x["id"] == agent_id for x in svc.list_agents()):
                 agent_id = "default"
             sess = svc.create_session(agent_id, title=f"⚙ {a['name']}",
-                                      backend=a.get("backend", ""), model=a.get("model", ""))
+                                      backend=a.get("backend", ""), model=a.get("model", ""),
+                                      project=a.get("project", ""))
             _set_session(aid, sess["id"])
+        elif sess.get("project") != a.get("project", ""):
+            # the automation's working folder changed — follow it
+            sess["project"] = a.get("project", "")
+            svc._save_session(sess)
         prompt = a["prompt"]
         if payload:
             prompt += f"\n\n### Webhook payload:\n{payload[:6000]}"
@@ -221,9 +230,17 @@ def run_automation(aid: str, payload: str = ""):
             t = ev.get("type")
             if t == "token":
                 parts.append(ev.get("text", ""))
-            elif t in ("confirm", "offline"):
-                # non-interactive: never approve destructive actions or a
-                # silent switch to the local model
+            elif t == "confirm":
+                # Non-interactive policy: file WRITES inside the automation's
+                # own project folder are allowed (that's what the folder is
+                # for); everything else that would ask a human — writes outside
+                # the project, destructive shell — is denied.
+                ok = (ev.get("tool") == "write_file"
+                      and bool(a.get("project"))
+                      and "outside the project" not in str(ev.get("action", "")))
+                svc.resolve_confirm(ev.get("id", ""), ok)
+            elif t == "offline":
+                # never silently switch to the local model unattended
                 svc.resolve_confirm(ev.get("id", ""), False)
             elif t == "error":
                 status = "error"

@@ -161,6 +161,7 @@ function AutomationEditor({
   const [dailyAt, setDailyAt] = useState(automation?.trigger.at ?? "09:00");
   const [prompt, setPrompt] = useState(automation?.prompt ?? "");
   const [agent, setAgent] = useState(automation?.agent ?? "");
+  const [project, setProject] = useState(automation?.project ?? "");
   const [webhookUrl, setWebhookUrl] = useState(automation?.actions.webhook_url ?? "");
   const [saveNote, setSaveNote] = useState(automation?.actions.save_note ?? false);
   const [err, setErr] = useState("");
@@ -186,6 +187,7 @@ function AutomationEditor({
     if (trigType === "daily") trigger.at = dailyAt;
     return {
       name: name.trim(), icon, enabled, trigger, prompt: prompt.trim(), agent,
+      project: project.trim(),
       actions: { webhook_url: webhookUrl.trim(), save_note: saveNote },
     };
   }
@@ -320,6 +322,18 @@ function AutomationEditor({
         {trigType === "webhook" && !automation && (
           <p className="help">Save first — the hook URL appears here after the automation is created.</p>
         )}
+      </div>
+
+      <div className="auto-section">
+        <div className="auto-section-label">Works in folder <span className="field-val">optional</span></div>
+        <div className="field">
+          <input placeholder="e.g. ~/Documents/Obsidian Vault — file writes are allowed INSIDE this folder only"
+            value={project} onChange={(e) => setProject(e.target.value)} />
+          <p className="help">
+            Commands run here and the agent may create/update files in it without asking.
+            Writes outside it and destructive shell commands are always denied in automation runs.
+          </p>
+        </div>
       </div>
 
       <div className="auto-section">

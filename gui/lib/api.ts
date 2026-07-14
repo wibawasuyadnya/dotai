@@ -184,6 +184,7 @@ export interface AutomationRun { ts: number; status: string; summary: string }
 export interface Automation {
   id: string; name: string; icon: string; enabled: boolean;
   trigger: AutomationTrigger; prompt: string; agent: string;
+  project?: string; // working folder — in-folder writes allowed during runs
   backend: string; model: string;
   actions: { webhook_url: string; save_note: boolean };
   session: string; created: number; updated: number;
