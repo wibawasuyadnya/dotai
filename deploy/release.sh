@@ -81,13 +81,22 @@ cd "$ROOT"
 # ── 4. github release + assets ───────────────────────────────────────────────
 say "creating GitHub release $VER"
 RID=$(python3 - "$TOKEN" "$VER" <<'EOF'
-import json, sys, urllib.request
+import json, re, sys, urllib.request
 token, ver = sys.argv[1], sys.argv[2]
 body = (f"Install: `curl -fsSL https://raw.githubusercontent.com/wibawasuyadnya/orkesai/main/install.sh | bash`"
         f" · `npm install -g wibawasuyadnya/orkesai` · `brew install wibawasuyadnya/orkesai/orkesai`\n\n"
         f"Desktop (nothing to preinstall — python + server are inside the app): "
         f"OrkesAI-arm64.dmg (Apple Silicon) · OrkesAI-x64.dmg (Intel Mac) · "
         f"OrkesAI-x64.exe (Windows, experimental)")
+# What's new comes straight from this version's CHANGELOG.md section, so every
+# release page documents its own features
+try:
+    cl = open("CHANGELOG.md", encoding="utf-8").read()
+    m = re.search(rf"^## \[{re.escape(ver)}\].*?$(.*?)(?=^## \[|\Z)", cl, re.S | re.M)
+    if m and m.group(1).strip():
+        body = m.group(1).strip() + "\n\n---\n\n" + body
+except Exception:
+    pass
 req = urllib.request.Request(
     "https://api.github.com/repos/wibawasuyadnya/orkesai/releases",
     data=json.dumps({"tag_name": ver, "name": f"OrkesAI {ver}", "body": body,

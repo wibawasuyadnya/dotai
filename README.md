@@ -41,6 +41,8 @@
 
 ---
 
+See [CHANGELOG.md](CHANGELOG.md) for what each version brought.
+
 ## Installation
 
 ### Desktop app (recommended — nothing to preinstall)
